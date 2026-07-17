@@ -2020,13 +2020,46 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
 
     if (personToAddSpouseFor != null) {
         val spouseOf = personToAddSpouseFor!!
+        
+        // Children of spouseOf to select from
+        val childrenOfPerson = remember(spouseOf, relationships, allPersonsRaw) {
+            val childIds = relationships.filter { rel ->
+                (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") && rel.personId1 == spouseOf.id
+            }.map { rel -> rel.personId2 }.toSet()
+            allPersonsRaw.filter { it.id in childIds }
+        }
+        
+        // Auto-select children who are also linked to previous spouses of spouseOf
+        val childrenToPreselect = remember(spouseOf, relationships, childrenOfPerson) {
+            val spouseIds = relationships.filter { rel ->
+                (rel.type == "Spouse" || rel.type == "Divorced" || rel.type == "SecondSpouse" || rel.type == "SecondSpouse_Divorced") &&
+                (rel.personId1 == spouseOf.id || rel.personId2 == spouseOf.id)
+            }.map { rel ->
+                if (rel.personId1 == spouseOf.id) rel.personId2 else rel.personId1
+            }.toSet()
+            
+            if (spouseIds.isEmpty()) {
+                emptyList<Long>()
+            } else {
+                childrenOfPerson.filter { child ->
+                    relationships.any { rel ->
+                        (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") &&
+                        rel.personId2 == child.id &&
+                        rel.personId1 in spouseIds
+                    }
+                }.map { it.id }
+            }
+        }
+
         AddSpouseDialog(
             spouseOf = spouseOf,
             groups = allGroups,
+            children = childrenOfPerson,
+            preselectedChildIds = childrenToPreselect,
             textColor = textColor,
             accentColor = accentColor,
             onDismiss = { personToAddSpouseFor = null },
-            onConfirm = { firstName, lastName, gender, birthDate, birthPlace, deathDate, deathPlace, isDeceased, occupation, bio, groupId, relationshipType ->
+            onConfirm = { firstName, lastName, gender, birthDate, birthPlace, deathDate, deathPlace, isDeceased, occupation, bio, groupId, relationshipType, selectedChildIds ->
                 viewModel.addSpouseToPerson(
                     spouseOf = spouseOf,
                     spouse = Person(
@@ -2042,7 +2075,8 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                         biography = bio,
                         groupId = groupId
                     ),
-                    relationshipType = relationshipType
+                    relationshipType = relationshipType,
+                    childIdsToLink = selectedChildIds
                 ) { newId: Long ->
                     Toast.makeText(context, "همسر با موفقیت برای ${spouseOf.fullName} اضافه شد", Toast.LENGTH_SHORT).show()
                 }
@@ -5120,10 +5154,12 @@ fun EditPersonDialog(
 fun AddSpouseDialog(
     spouseOf: Person,
     groups: List<com.example.data.FamilyGroup>,
+    children: List<Person> = emptyList(),
+    preselectedChildIds: List<Long> = emptyList(),
     textColor: Color,
     accentColor: Color,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, String?, String?, String?, String?, Boolean, String?, String?, Long?, String) -> Unit
+    onConfirm: (String, String, String, String?, String?, String?, String?, Boolean, String?, String?, Long?, String, List<Long>) -> Unit
 ) {
     val defaultGender = if (spouseOf.gender == "Male") "Female" else "Male"
     var firstName by remember { mutableStateOf("") }
@@ -5141,6 +5177,7 @@ fun AddSpouseDialog(
     var selectedGroupIdForPerson by remember { mutableStateOf<Long?>(spouseOf.groupId) }
     var isSecondSpouse by remember { mutableStateOf(false) }
     var isDivorced by remember { mutableStateOf(false) }
+    var selectedChildIds by remember { mutableStateOf(preselectedChildIds.toSet()) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         AlertDialog(
@@ -5280,6 +5317,54 @@ fun AddSpouseDialog(
                     )
                 }
                 
+                // Shared children selector (Bug #2)
+                if (children.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "انتخاب فرزندان مشترک با همسر جدید (در صورت وجود):",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                    children.forEach { child ->
+                        item(key = "child_${child.id}") {
+                            val isSelected = selectedChildIds.contains(child.id)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedChildIds = if (isSelected) {
+                                            selectedChildIds - child.id
+                                        } else {
+                                            selectedChildIds + child.id
+                                        }
+                                    }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isSelected,
+                                    onCheckedChange = { checked ->
+                                        selectedChildIds = if (checked == true) {
+                                            selectedChildIds + child.id
+                                        } else {
+                                            selectedChildIds - child.id
+                                        }
+                                    }
+                                )
+                                Text(
+                                    text = child.fullName,
+                                    color = textColor,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Group selector
                 item {
                     Text("گروه فامیلی همسر:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = textColor)
@@ -5343,7 +5428,8 @@ fun AddSpouseDialog(
                             occupation.ifBlank { null },
                             biography.ifBlank { null },
                             selectedGroupIdForPerson,
-                            relType
+                            relType,
+                            selectedChildIds.toList()
                         )
                     }
                 },
@@ -6464,8 +6550,6 @@ fun CalculatorDialog(
     var p1Dropdown by remember { mutableStateOf(false) }
     var p2Dropdown by remember { mutableStateOf(false) }
 
-    var calculatedRelation by remember { mutableStateOf<String?>(null) }
-
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -6502,7 +6586,6 @@ fun CalculatorDialog(
                                     onClick = {
                                         p1 = p
                                         p1Dropdown = false
-                                        calculatedRelation = null
                                     }
                                 )
                             }
@@ -6528,7 +6611,6 @@ fun CalculatorDialog(
                                     onClick = {
                                         p2 = p
                                         p2Dropdown = false
-                                        calculatedRelation = null
                                     }
                                 )
                             }
@@ -6540,7 +6622,6 @@ fun CalculatorDialog(
                     val computed = remember(p1, p2, persons, relationships) {
                         RelationshipCalculator.getRelationshipLabel(p1!!, p2!!, persons, relationships)
                     }
-                    calculatedRelation = computed
 
                     Card(
                         colors = CardDefaults.cardColors(containerColor = accentColor.copy(alpha = 0.1f)),

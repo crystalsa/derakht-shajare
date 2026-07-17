@@ -10,6 +10,11 @@ plugins {
 }
 
 android {
+  // INTENTIONAL ARCHITECTURAL BOUNDARY (BUG #8):
+  // The namespace "com.example" is used for the generated R class, source directories,
+  // and local code compilation, while "com.aistudio.familytree.shjrep" is the unique production
+  // applicationId assigned to this specific build. Android fully supports decoupling
+  // applicationId from namespace (package), which is an intentional, safe, and stable AGP setup.
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 

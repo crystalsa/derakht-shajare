@@ -71,21 +71,26 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
-    // Search and filtered persons
-    val filteredPersons: StateFlow<List<Person>> = combine(
-        allPersons, searchQuery, filterGender, filterResidence, filterIsDeceased, selectedGroupId, allRelationships
-    ) { flows ->
-        @Suppress("UNCHECKED_CAST")
-        val persons = flows[0] as List<Person>
-        val query = flows[1] as String
-        val gender = flows[2] as String?
-        val residence = flows[3] as String
-        val isDeceased = flows[4] as Boolean?
-        val groupId = flows[5] as Long?
-        @Suppress("UNCHECKED_CAST")
-        val relationships = flows[6] as List<Relationship>
+    // Search and filtered persons helper class
+    data class FilterParams(
+        val query: String,
+        val gender: String?,
+        val residence: String,
+        val isDeceased: Boolean?,
+        val groupId: Long?
+    )
 
+    private val filterParams: Flow<FilterParams> = combine(
+        searchQuery, filterGender, filterResidence, filterIsDeceased, selectedGroupId
+    ) { query, gender, residence, isDeceased, groupId ->
+        FilterParams(query, gender, residence, isDeceased, groupId)
+    }
+
+    val filteredPersons: StateFlow<List<Person>> = combine(
+        allPersons, allRelationships, filterParams
+    ) { persons, relationships, params ->
         val visibleIds = mutableSetOf<Long>()
+        val groupId = params.groupId
         android.util.Log.d("FamilyViewModel", "filteredPersons: persons.size=${persons.size}, groupId=$groupId, relationships.size=${relationships.size}")
         if (groupId != null) {
             val baseGroupPersons = persons.filter { it.groupId == groupId }
@@ -137,17 +142,21 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         val result = persons.filter { person ->
             val matchesGroup = visibleIds.contains(person.id)
 
+            val query = params.query
             val matchesQuery = query.isEmpty() || 
                 person.fullName.contains(query, ignoreCase = true) ||
                 (person.occupation?.contains(query, ignoreCase = true) ?: false) ||
                 (person.biography?.contains(query, ignoreCase = true) ?: false)
             
+            val gender = params.gender
             val matchesGender = gender == null || person.gender == gender
             
+            val residence = params.residence
             val matchesResidence = residence.isEmpty() ||
                 (person.birthPlace?.contains(residence, ignoreCase = true) ?: false) ||
                 (person.deathPlace?.contains(residence, ignoreCase = true) ?: false)
                 
+            val isDeceased = params.isDeceased
             val matchesDeceased = isDeceased == null || person.isDeceased == isDeceased
 
             matchesGroup && matchesQuery && matchesGender && matchesResidence && matchesDeceased
@@ -348,15 +357,23 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun addSpouseToPerson(spouseOf: Person, spouse: Person, relationshipType: String = "Spouse", onComplete: (Long) -> Unit = {}) {
+    fun addSpouseToPerson(
+        spouseOf: Person,
+        spouse: Person,
+        relationshipType: String = "Spouse",
+        childIdsToLink: List<Long> = emptyList(),
+        onComplete: (Long) -> Unit = {}
+    ) {
         viewModelScope.launch {
             val spouseWithGen = spouse.copy(generation = spouseOf.generation)
             val spouseId = repository.insertPerson(spouseWithGen)
             repository.insertRelationship(Relationship(personId1 = spouseOf.id, personId2 = spouseId, type = relationshipType))
             
-            // Automatically find children of spouseOf and link them to the new spouse too
+            // Automatically find and link ONLY the selected children of spouseOf to the new spouse too
             val children = allRelationships.value.filter { rel ->
-                (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") && rel.personId1 == spouseOf.id
+                (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") && 
+                rel.personId1 == spouseOf.id && 
+                rel.personId2 in childIdsToLink
             }
             for (childRel in children) {
                 val exists = allRelationships.value.any { rel ->
@@ -589,7 +606,9 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     birthCal.add(Calendar.YEAR, 1)
                 }
                 val daysRemaining = daysBetween(today, birthCal)
-                val age = currentYear - (extractYear(p.birthDate) ?: currentYear)
+                val birthYear = extractYear(p.birthDate) ?: currentYear
+                val correctCurrentYear = getCurrentYearFor(birthYear)
+                val age = correctCurrentYear - birthYear
                 
                 if (daysRemaining in 0..30) {
                     events.add(
@@ -614,7 +633,9 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         deathCal.add(Calendar.YEAR, 1)
                     }
                     val daysRemaining = daysBetween(today, deathCal)
-                    val yearsPassed = currentYear - (extractYear(p.deathDate) ?: currentYear)
+                    val deathYear = extractYear(p.deathDate) ?: currentYear
+                    val correctCurrentYear = getCurrentYearFor(deathYear)
+                    val yearsPassed = correctCurrentYear - deathYear
                     if (daysRemaining in 0..30) {
                         events.add(
                             FamilyEvent(
@@ -675,13 +696,84 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private val jalaliDaysInMonth = intArrayOf(31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29)
+
+    private fun jalaliToGregorian(jy: Int, jm: Int, jd: Int): IntArray {
+        val jyNormalized = jy - 979
+        val jmNormalized = jm - 1
+        val jdNormalized = jd - 1
+
+        var jDayNo = 365 * jyNormalized + (jyNormalized / 33) * 8 + (jyNormalized % 33 + 3) / 4
+        for (i in 0 until jmNormalized) {
+            jDayNo += jalaliDaysInMonth[i]
+        }
+        jDayNo += jdNormalized
+
+        var gDayNo = jDayNo + 79
+        var gy = 1600 + 400 * (gDayNo / 146097)
+        gDayNo %= 146097
+
+        var leap = true
+        if (gDayNo >= 36525) {
+            gDayNo--
+            gy += 100 * (gDayNo / 36524)
+            gDayNo %= 36524
+
+            if (gDayNo >= 365) {
+                gDayNo++
+            } else {
+                leap = false
+            }
+        }
+
+        gy += 4 * (gDayNo / 1461)
+        gDayNo %= 1461
+
+        if (gDayNo >= 366) {
+            leap = false
+            gDayNo--
+            gy += gDayNo / 365
+            gDayNo %= 365
+        }
+
+        var gd = gDayNo + 1
+        val gDaysInMonth = intArrayOf(31, if (leap) 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+        var gm = 0
+        while (gm < 12 && gd > gDaysInMonth[gm]) {
+            gd -= gDaysInMonth[gm]
+            gm++
+        }
+        gm++ // 1-indexed
+
+        return intArrayOf(gy, gm, gd)
+    }
+
     private fun parseDateCal(dateString: String?): Calendar? {
         if (dateString.isNullOrEmpty()) return null
         return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            val date = sdf.parse(dateString) ?: return null
+            val parts = dateString.split("-")
+            val year = parts.getOrNull(0)?.toIntOrNull() ?: return null
+            val month = parts.getOrNull(1)?.toIntOrNull() ?: 1
+            val day = parts.getOrNull(2)?.toIntOrNull() ?: 1
+
             val cal = Calendar.getInstance()
-            cal.time = date
+            if (year < 1600) {
+                // Jalali date, convert to Gregorian first
+                val gDate = jalaliToGregorian(year, month, day)
+                cal.set(Calendar.YEAR, gDate[0])
+                cal.set(Calendar.MONTH, gDate[1] - 1) // Calendar months are 0-indexed
+                cal.set(Calendar.DAY_OF_MONTH, gDate[2])
+            } else {
+                // Gregorian date
+                cal.set(Calendar.YEAR, year)
+                cal.set(Calendar.MONTH, month - 1)
+                cal.set(Calendar.DAY_OF_MONTH, day)
+            }
+            // Clear hour, minute, second, millisecond for clean day calculations
+            cal.set(Calendar.HOUR_OF_DAY, 0)
+            cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
             cal
         } catch (e: Exception) {
             null
@@ -779,19 +871,22 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 val groupsArr = if (backupObj.has("groups")) backupObj.getJSONArray("groups") else org.json.JSONArray()
                 
                 // We do NOT clear the data, so we can merge existing and backup information safely!
+                val oldToNewGroupIdMap = mutableMapOf<Long, Long>()
+                val oldToNewPersonIdMap = mutableMapOf<Long, Long>()
                 
                 for (i in 0 until groupsArr.length()) {
                     val gObj = groupsArr.getJSONObject(i)
-                    val id = gObj.getLong("id")
+                    val oldGroupId = gObj.getLong("id")
                     val name = gObj.getString("name")
                     val description = if (gObj.isNull("description")) null else gObj.getString("description")
                     
-                    repository.insertGroup(com.example.data.FamilyGroup(id = id, name = name, description = description))
+                    val newGroupId = repository.insertGroup(com.example.data.FamilyGroup(id = 0, name = name, description = description))
+                    oldToNewGroupIdMap[oldGroupId] = newGroupId
                 }
                 
                 for (i in 0 until personsArr.length()) {
                     val pObj = personsArr.getJSONObject(i)
-                    val id = pObj.getLong("id")
+                    val oldId = pObj.getLong("id")
                     val firstName = pObj.getString("firstName")
                     val lastName = pObj.getString("lastName")
                     val gender = pObj.getString("gender")
@@ -804,11 +899,13 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     val biography = if (pObj.isNull("biography")) null else pObj.getString("biography")
                     val photoUri = if (pObj.isNull("photoUri")) null else pObj.getString("photoUri")
                     val generation = pObj.getInt("generation")
-                    val groupId = if (pObj.isNull("groupId")) null else pObj.getLong("groupId")
                     
-                    repository.insertPerson(
+                    val oldGroupId = if (pObj.isNull("groupId")) null else pObj.getLong("groupId")
+                    val newGroupId = if (oldGroupId != null) oldToNewGroupIdMap[oldGroupId] else null
+                    
+                    val newPersonId = repository.insertPerson(
                         com.example.data.Person(
-                            id = id,
+                            id = 0, // Let Room auto-generate a new ID
                             firstName = firstName,
                             lastName = lastName,
                             gender = gender,
@@ -821,26 +918,31 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                             biography = biography,
                             photoUri = photoUri,
                             generation = generation,
-                            groupId = groupId
+                            groupId = newGroupId
                         )
                     )
+                    oldToNewPersonIdMap[oldId] = newPersonId
                 }
                 
                 for (i in 0 until relsArr.length()) {
                     val rObj = relsArr.getJSONObject(i)
-                    val id = rObj.getLong("id")
-                    val personId1 = rObj.getLong("personId1")
-                    val personId2 = rObj.getLong("personId2")
+                    val oldP1 = rObj.getLong("personId1")
+                    val oldP2 = rObj.getLong("personId2")
                     val type = rObj.getString("type")
                     
-                    repository.insertRelationship(
-                        com.example.data.Relationship(
-                            id = id,
-                            personId1 = personId1,
-                            personId2 = personId2,
-                            type = type
+                    val newP1 = oldToNewPersonIdMap[oldP1]
+                    val newP2 = oldToNewPersonIdMap[oldP2]
+                    
+                    if (newP1 != null && newP2 != null) {
+                        repository.insertRelationship(
+                            com.example.data.Relationship(
+                                id = 0, // Let Room auto-generate a new ID
+                                personId1 = newP1,
+                                personId2 = newP2,
+                                type = type
+                            )
                         )
-                    )
+                    }
                 }
                 
                 onComplete(true, "بازگردانی و ادغام فایل پشتیبان با موفقیت انجام شد.")

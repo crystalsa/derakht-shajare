@@ -17,8 +17,8 @@ object RelationshipCalculator {
         for (rel in allRelationships) {
             if (rel.personId1 == from.id && rel.personId2 == to.id) {
                 return when (rel.type) {
-                    "Spouse" -> "SPOUSE"
-                    "Divorced" -> "EX_SPOUSE"
+                    "Spouse", "SecondSpouse" -> "SPOUSE"
+                    "Divorced", "SecondSpouse_Divorced" -> "EX_SPOUSE"
                     "Parent-Child" -> if (to.gender == "Male") "SON" else "DAUGHTER"
                     "Adoptive-Parent-Child" -> if (to.gender == "Male") "ADOPTIVE_SON" else "ADOPTIVE_DAUGHTER"
                     else -> null
@@ -26,8 +26,8 @@ object RelationshipCalculator {
             }
             if (rel.personId1 == to.id && rel.personId2 == from.id) {
                 return when (rel.type) {
-                    "Spouse" -> "SPOUSE"
-                    "Divorced" -> "EX_SPOUSE"
+                    "Spouse", "SecondSpouse" -> "SPOUSE"
+                    "Divorced", "SecondSpouse_Divorced" -> "EX_SPOUSE"
                     "Parent-Child" -> if (to.gender == "Male") "FATHER" else "MOTHER"
                     "Adoptive-Parent-Child" -> if (to.gender == "Male") "ADOPTIVE_FATHER" else "ADOPTIVE_MOTHER"
                     else -> null
