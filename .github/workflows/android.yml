@@ -45,6 +45,10 @@ jobs:
     - name: Configure Environment Variables
       run: cp .env.example .env
 
+    - name: Configure Gradle Properties for GitHub Actions
+      run: |
+        sed -i 's/kotlin.compiler.execution.strategy=in-process/kotlin.compiler.execution.strategy=daemon/g' gradle.properties
+
     - name: Build Debug APK
       run: gradle :app:assembleDebug -Pkotlin.compiler.execution.strategy=daemon --no-configuration-cache
 
