@@ -1,5 +1,5 @@
 {
-  "name": "شجره‌نامه خانوادگی",
+  "name": "شجره نامه",
   "description": "اپلیکیشن پیشرفته شجره‌نامه خانوادگی با درخت تعاملی، یادآور رویدادها، آمار جمعیتی و محاسبه نسبت فامیلی.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
