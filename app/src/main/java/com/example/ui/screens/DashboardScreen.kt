@@ -156,6 +156,35 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     val allPersonsRaw by viewModel.allPersons.collectAsStateWithLifecycle()
     val relationships by viewModel.allRelationships.collectAsStateWithLifecycle()
     
+    val databaseError by viewModel.databaseError.collectAsStateWithLifecycle()
+    if (databaseError != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { /* Keep the dialog displayed since it is critical */ },
+            title = {
+                androidx.compose.material3.Text(
+                    text = "خطای پایگاه داده",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            text = {
+                androidx.compose.material3.Text(
+                    text = "مشکلی در بارگذاری اطلاعات شجره‌نامه به وجود آمد. یک نسخه پشتیبان از فایل قبلی تهیه شد تا اطلاعات شما از دست نرود. لطفاً برنامه را دوباره بررسی کنید.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { /* Accept and close */ }
+                ) {
+                    androidx.compose.material3.Text(
+                        text = "متوجه شدم",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+            }
+        )
+    }
+    
     val currentLayout by viewModel.treeLayout.collectAsStateWithLifecycle()
     val currentTheme = "Bento Grid"
     val focusPersonId by viewModel.focusPersonId.collectAsStateWithLifecycle()

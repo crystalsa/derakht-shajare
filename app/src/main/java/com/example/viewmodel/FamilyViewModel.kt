@@ -57,9 +57,45 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     val glowPersonId = _glowPersonId.asStateFlow()
     private var glowJob: kotlinx.coroutines.Job? = null
 
+    private val _databaseError = MutableStateFlow<String?>(null)
+    val databaseError = _databaseError.asStateFlow()
+
     init {
         val database = FamilyDatabase.getDatabase(application)
         repository = FamilyRepository(database.familyDao())
+        
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                // Safely validate and warm up the database on the background thread
+                database.openHelper.writableDatabase
+            } catch (e: android.database.sqlite.SQLiteException) {
+                android.util.Log.e("FamilyViewModel", "SQLiteException during database startup schema validation/open", e)
+                try {
+                    val dbFile = application.getDatabasePath("family_tree_database")
+                    if (dbFile.exists()) {
+                        val backupFile = java.io.File(dbFile.parent, "family_tree_database.bak")
+                        dbFile.copyTo(backupFile, overwrite = true)
+                        android.util.Log.i("FamilyViewModel", "Corrupt or incompatible database backed up to family_tree_database.bak")
+                    }
+                } catch (backupEx: Exception) {
+                    android.util.Log.e("FamilyViewModel", "Failed to backup database during recovery phase", backupEx)
+                }
+                _databaseError.value = "خطا در بارگذاری پایگاه داده"
+            } catch (e: IllegalStateException) {
+                android.util.Log.e("FamilyViewModel", "Room migration mismatch/illegal state during database open", e)
+                try {
+                    val dbFile = application.getDatabasePath("family_tree_database")
+                    if (dbFile.exists()) {
+                        val backupFile = java.io.File(dbFile.parent, "family_tree_database.bak")
+                        dbFile.copyTo(backupFile, overwrite = true)
+                        android.util.Log.i("FamilyViewModel", "Corrupt database backed up to family_tree_database.bak")
+                    }
+                } catch (backupEx: Exception) {
+                    android.util.Log.e("FamilyViewModel", "Failed to backup database during recovery phase", backupEx)
+                }
+                _databaseError.value = "خطا در بارگذاری پایگاه داده"
+            }
+        }
         
         allPersons = repository.allPersons
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

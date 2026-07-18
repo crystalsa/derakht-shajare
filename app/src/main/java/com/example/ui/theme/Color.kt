@@ -45,6 +45,26 @@ val LightFamilyTreeColors = FamilyTreeColorScheme(
     lineEffectColor = Color(0xFFCBE3D8)
 )
 
+val DarkFamilyTreeColors = FamilyTreeColorScheme(
+    primary = Color(0xFF6BBA93),
+    primaryContainer = Color(0xFF1C4733),
+    background = Color(0xFF121A16),
+    surface = Color(0xFF1C2822),
+    surfaceVariant = Color(0xFF25352E),
+    onSurface = Color(0xFFE8F1EB),
+    onSurfaceVariant = Color(0xFFA5B9AE),
+    textPrimary = Color(0xFFE8F1EB),
+    textSecondary = Color(0xFFA5B9AE),
+    success = Color(0xFF81C784),
+    warning = Color(0xFFFFB74D),
+    danger = Color(0xFFE57373),
+    genderMale = Color(0xFF63B3ED),
+    genderFemale = Color(0xFFF687B3),
+    deceasedTone = Color(0xFF78909C),
+    secondSpouseTone = Color(0xFFF6AD55),
+    lineEffectColor = Color(0xFF2D4439)
+)
+
 val LocalFamilyTreeColors = staticCompositionLocalOf { LightFamilyTreeColors }
 
 object FamilyTreeTheme {

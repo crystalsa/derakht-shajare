@@ -20,81 +20,37 @@ abstract class FamilyDatabase : RoomDatabase() {
                 try {
                     // Create family_groups table if it does not exist
                     db.execSQL("CREATE TABLE IF NOT EXISTS `family_groups` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `description` TEXT)")
-                } catch (e: Exception) {
-                    android.util.Log.e("FamilyDatabase", "Error creating family_groups table: ${e.localizedMessage}")
+                } catch (e: android.database.sqlite.SQLiteException) {
+                    android.util.Log.e("FamilyDatabase", "Error creating family_groups table in migration 1_2", e)
                 }
 
                 try {
                     // Add groupId column to persons table
                     db.execSQL("ALTER TABLE `persons` ADD COLUMN `groupId` INTEGER DEFAULT NULL")
-                } catch (e: Exception) {
-                    android.util.Log.e("FamilyDatabase", "Error adding groupId column to persons: ${e.localizedMessage}")
+                } catch (e: android.database.sqlite.SQLiteException) {
+                    android.util.Log.e("FamilyDatabase", "Error adding groupId column to persons in migration 1_2", e)
                 }
             }
         }
 
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                try {
-                    // Create family_groups table if it does not exist
-                    db.execSQL("CREATE TABLE IF NOT EXISTS `family_groups` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `description` TEXT)")
-                } catch (e: Exception) {
-                    android.util.Log.e("FamilyDatabase", "Error creating family_groups table: ${e.localizedMessage}")
-                }
-
-                try {
-                    // Add groupId column to persons table
-                    db.execSQL("ALTER TABLE `persons` ADD COLUMN `groupId` INTEGER DEFAULT NULL")
-                } catch (e: Exception) {
-                    android.util.Log.e("FamilyDatabase", "Error adding groupId column to persons: ${e.localizedMessage}")
-                }
+                android.util.Log.i("FamilyDatabase", "Running MIGRATION_2_3 (no-op database schema change, logic updates only)")
             }
         }
 
         fun getDatabase(context: Context): FamilyDatabase {
             return INSTANCE ?: synchronized(this) {
-                var instance: FamilyDatabase? = null
-                try {
-                    val dbBuilder = Room.databaseBuilder(
-                        context.applicationContext,
-                        FamilyDatabase::class.java,
-                        "family_tree_database"
-                    )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
-                    .fallbackToDestructiveMigration()
-                    
-                    val db = dbBuilder.build()
-                    // Force database opening and validation of the schema on the background thread/immediately
-                    db.openHelper.writableDatabase
-                    instance = db
-                } catch (e: Exception) {
-                    android.util.Log.e("FamilyDatabase", "Room migration or schema validation failed, recreating database: ${e.localizedMessage}")
-                    try {
-                        context.deleteDatabase("family_tree_database")
-                        val db = Room.databaseBuilder(
-                            context.applicationContext,
-                            FamilyDatabase::class.java,
-                            "family_tree_database"
-                        )
-                        .fallbackToDestructiveMigration()
-                        .build()
-                        db.openHelper.writableDatabase
-                        instance = db
-                    } catch (ex: Exception) {
-                        android.util.Log.e("FamilyDatabase", "Failed to recreate database: ${ex.localizedMessage}")
-                    }
-                }
-                
-                val finalInstance = instance ?: Room.databaseBuilder(
+                val instance = Room.databaseBuilder(
                     context.applicationContext,
                     FamilyDatabase::class.java,
                     "family_tree_database"
                 )
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .fallbackToDestructiveMigration()
                 .build()
-                
-                INSTANCE = finalInstance
-                finalInstance
+                INSTANCE = instance
+                instance
             }
         }
     }

@@ -19,13 +19,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
-        // Safely initialize and validate Room Database on startup to prevent any migration or schema crashes
-        try {
-            FamilyDatabase.getDatabase(this)
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Error validating/initializing Room database on startup: ${e.localizedMessage}")
-        }
 
         setContent {
             MyApplicationTheme {
