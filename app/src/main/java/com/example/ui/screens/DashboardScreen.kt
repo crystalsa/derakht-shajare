@@ -74,8 +74,6 @@ import com.example.data.Relationship
 import com.example.utils.RelationshipCalculator
 import com.example.viewmodel.FamilyEvent
 import com.example.viewmodel.FamilyViewModel
-import com.example.ui.theme.FamilyTreeTheme
-import com.example.ui.theme.LocalFamilyTreeColors
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
@@ -155,35 +153,6 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     val persons by viewModel.filteredPersons.collectAsStateWithLifecycle()
     val allPersonsRaw by viewModel.allPersons.collectAsStateWithLifecycle()
     val relationships by viewModel.allRelationships.collectAsStateWithLifecycle()
-    
-    val databaseError by viewModel.databaseError.collectAsStateWithLifecycle()
-    if (databaseError != null) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { /* Keep the dialog displayed since it is critical */ },
-            title = {
-                androidx.compose.material3.Text(
-                    text = "خطای پایگاه داده",
-                    style = MaterialTheme.typography.titleLarge
-                )
-            },
-            text = {
-                androidx.compose.material3.Text(
-                    text = "مشکلی در بارگذاری اطلاعات شجره‌نامه به وجود آمد. یک نسخه پشتیبان از فایل قبلی تهیه شد تا اطلاعات شما از دست نرود. لطفاً برنامه را دوباره بررسی کنید.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(
-                    onClick = { /* Accept and close */ }
-                ) {
-                    androidx.compose.material3.Text(
-                        text = "متوجه شدم",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
-            }
-        )
-    }
     
     val currentLayout by viewModel.treeLayout.collectAsStateWithLifecycle()
     val currentTheme = "Bento Grid"
@@ -319,11 +288,11 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     }
 
     // Theme values (Optimized with gorgeous greens, high-contrast readability, and complementary accents)
-    val bgColor = FamilyTreeTheme.colors.background
-    val cardColor = FamilyTreeTheme.colors.surface
-    val textColor = FamilyTreeTheme.colors.textPrimary
-    val accentColor = FamilyTreeTheme.colors.primary
-    val lineEffectColor = FamilyTreeTheme.colors.lineEffectColor
+    val bgColor = Color(0xFFF1F8F5) // Soft Mint Cream background
+    val cardColor = Color(0xFFFFFFFF) // Pure White card surface
+    val textColor = Color(0xFF112E21) // High-contrast Deep Forest Charcoal text
+    val accentColor = Color(0xFF4CAF50) // Vibrant Light Green accent
+    val lineEffectColor = Color(0xFFCBE3D8) // Mint Sage border/grid lines
 
     val relationshipsInGroup = remember(relationships, persons) {
         val personIds = persons.map { it.id }.toSet()
@@ -2051,46 +2020,13 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
 
     if (personToAddSpouseFor != null) {
         val spouseOf = personToAddSpouseFor!!
-        
-        // Children of spouseOf to select from
-        val childrenOfPerson = remember(spouseOf, relationships, allPersonsRaw) {
-            val childIds = relationships.filter { rel ->
-                (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") && rel.personId1 == spouseOf.id
-            }.map { rel -> rel.personId2 }.toSet()
-            allPersonsRaw.filter { it.id in childIds }
-        }
-        
-        // Auto-select children who are also linked to previous spouses of spouseOf
-        val childrenToPreselect = remember(spouseOf, relationships, childrenOfPerson) {
-            val spouseIds = relationships.filter { rel ->
-                (rel.type == "Spouse" || rel.type == "Divorced" || rel.type == "SecondSpouse" || rel.type == "SecondSpouse_Divorced") &&
-                (rel.personId1 == spouseOf.id || rel.personId2 == spouseOf.id)
-            }.map { rel ->
-                if (rel.personId1 == spouseOf.id) rel.personId2 else rel.personId1
-            }.toSet()
-            
-            if (spouseIds.isEmpty()) {
-                emptyList<Long>()
-            } else {
-                childrenOfPerson.filter { child ->
-                    relationships.any { rel ->
-                        (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") &&
-                        rel.personId2 == child.id &&
-                        rel.personId1 in spouseIds
-                    }
-                }.map { it.id }
-            }
-        }
-
         AddSpouseDialog(
             spouseOf = spouseOf,
             groups = allGroups,
-            children = childrenOfPerson,
-            preselectedChildIds = childrenToPreselect,
             textColor = textColor,
             accentColor = accentColor,
             onDismiss = { personToAddSpouseFor = null },
-            onConfirm = { firstName, lastName, gender, birthDate, birthPlace, deathDate, deathPlace, isDeceased, occupation, bio, groupId, relationshipType, selectedChildIds ->
+            onConfirm = { firstName, lastName, gender, birthDate, birthPlace, deathDate, deathPlace, isDeceased, occupation, bio, groupId, relationshipType ->
                 viewModel.addSpouseToPerson(
                     spouseOf = spouseOf,
                     spouse = Person(
@@ -2106,8 +2042,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                         biography = bio,
                         groupId = groupId
                     ),
-                    relationshipType = relationshipType,
-                    childIdsToLink = selectedChildIds
+                    relationshipType = relationshipType
                 ) { newId: Long ->
                     Toast.makeText(context, "همسر با موفقیت برای ${spouseOf.fullName} اضافه شد", Toast.LENGTH_SHORT).show()
                 }
@@ -3081,17 +3016,14 @@ fun InteractiveFamilyTree(
             }
             .background(Color.Transparent)
     ) {
-        // Clean modern canvas background without loading unstable binary JPG assets
-        /*
         Image(
             painter = painterResource(id = com.example.R.drawable.ic_family_tree_icon),
             contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()
-                .alpha(0.04f),
+                .alpha(0.25f),
             contentScale = ContentScale.Crop
         )
-        */
 
         Box(
             modifier = Modifier
@@ -3104,12 +3036,6 @@ fun InteractiveFamilyTree(
                 )
         ) {
             // Draw connection lines on bottom layer
-            val primaryColor = FamilyTreeTheme.colors.primary
-            val genderMaleColor = FamilyTreeTheme.colors.genderMale
-            val secondSpouseColor = FamilyTreeTheme.colors.secondSpouseTone
-            val deceasedColor = FamilyTreeTheme.colors.deceasedTone
-            val warningColor = FamilyTreeTheme.colors.warning
-
             Canvas(
                 modifier = Modifier.fillMaxSize()
             ) {
@@ -3134,10 +3060,16 @@ fun InteractiveFamilyTree(
                         
                         // Deterministic random line color per family/relationship to distinguish families
                         val lineColors = listOf(
-                            primaryColor,
-                            genderMaleColor,
-                            secondSpouseColor,
-                            deceasedColor
+                            Color(0xFF2E7D32), // Green
+                            Color(0xFF1565C0), // Blue
+                            Color(0xFFC2185B), // Pink/Red
+                            Color(0xFF8E24AA), // Purple
+                            Color(0xFFE65100), // Orange/Amber
+                            Color(0xFF00838F), // Cyan
+                            Color(0xFF00695C), // Teal
+                            Color(0xFFD84315), // Deep Orange
+                            Color(0xFF6D4C41), // Brown
+                            Color(0xFF455A64)  // Blue Grey
                         )
                         val colorSeed = if (isSpouseRelation(rel.type)) {
                             minOf(rel.personId1, rel.personId2)
@@ -3145,7 +3077,7 @@ fun InteractiveFamilyTree(
                             rel.personId1 // Parent ID for child relationship connections
                         }
                         val randomLineColor = lineColors[(colorSeed % lineColors.size).toInt()]
-                        val drawColor = if (isHighlightedConnection) warningColor else randomLineColor.copy(alpha = 0.9f)
+                        val drawColor = if (isHighlightedConnection) Color(0xFFD84315) else randomLineColor.copy(alpha = 0.9f)
 
                         when (rel.type) {
                             "Spouse", "SecondSpouse" -> {
@@ -3316,23 +3248,19 @@ fun FamilyMemberNodeCard(
     glowPersonId: Long? = null
 ) {
     val isGlow = person.id == glowPersonId
-    val deceasedToneColor = FamilyTreeTheme.colors.deceasedTone
     val borderStroke = if (isHighlighted) {
         // High-contrast Orange and White gradient border for selection/highlight
         BorderStroke(3.dp, Brush.linearGradient(listOf(Color(0xFFF57C00), Color.White, Color(0xFFF57C00))))
     } else if (isGlow) {
         BorderStroke(3.2.dp, accentColor)
     } else if (person.isDeceased) {
-        BorderStroke(1.2.dp, deceasedToneColor.copy(alpha = 0.5f))
+        BorderStroke(1.2.dp, Color.Gray.copy(alpha = 0.5f))
     } else {
         BorderStroke(1.5.dp, accentColor.copy(alpha = 0.5f))
     }
 
-    val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
-    val cardWidth = (screenWidth * 0.42f).coerceIn(135f, 180f).dp
-
     val cardModifier = Modifier
-        .width(cardWidth)
+        .width(160.dp) // Slightly wider for better details fitting
         .let { modifier ->
             if (isGlow) {
                 modifier.shadow(elevation = 16.dp, shape = RoundedCornerShape(16.dp))
@@ -3346,7 +3274,7 @@ fun FamilyMemberNodeCard(
     Card(
         modifier = cardModifier,
         colors = CardDefaults.cardColors(
-            containerColor = cardBgColor
+            containerColor = Color.White // Explicit pure white card background for maximum contrast
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
         border = borderStroke,
@@ -3362,7 +3290,7 @@ fun FamilyMemberNodeCard(
                             .align(Alignment.TopEnd)
                     ) {
                         drawLine(
-                            color = deceasedToneColor,
+                            color = Color(0xFF1E1E1E), // Solid dark charcoal/black
                             start = Offset(0f, size.height),
                             end = Offset(size.width, 0f),
                             strokeWidth = 6.dp.toPx()
@@ -3414,7 +3342,7 @@ fun FamilyMemberNodeCard(
                         .size(72.dp)
                         .clip(CircleShape)
                         .background(
-                            if (person.gender == "Male") FamilyTreeTheme.colors.genderMale.copy(alpha = 0.15f) else FamilyTreeTheme.colors.genderFemale.copy(alpha = 0.15f)
+                            if (person.gender == "Male") Color(0xFFE3F2FD) else Color(0xFFFCE4EC)
                         )
                         .border(1.5.dp, if (!person.photoUri.isNullOrBlank()) accentColor else Color.Transparent, CircleShape)
                         .clickable { onPhotoClick(person) },
@@ -3431,7 +3359,7 @@ fun FamilyMemberNodeCard(
                         Icon(
                             if (person.gender == "Male") Icons.Default.Boy else Icons.Default.Girl,
                             contentDescription = null,
-                            tint = if (person.gender == "Male") FamilyTreeTheme.colors.genderMale else FamilyTreeTheme.colors.genderFemale,
+                            tint = if (person.gender == "Male") Color(0xFF1E88E5) else Color(0xFFD81B60),
                             modifier = Modifier.size(52.dp)
                         )
                     }
@@ -3443,7 +3371,7 @@ fun FamilyMemberNodeCard(
                     text = person.fullName,
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
-                    color = textColor,
+                    color = Color(0xFF112E21), // High-contrast Deep Forest Charcoal text
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center
@@ -3494,7 +3422,7 @@ fun FamilyMemberNodeCard(
                     Text(
                         text = ageDisplay.toFarsiNumbers(),
                         fontSize = 10.sp,
-                        color = FamilyTreeTheme.colors.textSecondary,
+                        color = Color(0xFF455A64), // Extremely legible slate gray for year
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -4519,7 +4447,6 @@ fun FarsiWheelDatePickerDialog(
 }
 
 // Dialog Component for adding new people
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddPersonDialog(
     theme: String,
@@ -4548,32 +4475,18 @@ fun AddPersonDialog(
     var selectedSpouseId by remember(availableSpouses) { mutableStateOf<Long?>(availableSpouses.firstOrNull()?.id) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        ModalBottomSheet(
+        AlertDialog(
             onDismissRequest = onDismiss,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = FamilyTreeTheme.colors.surface,
-            dragHandle = { BottomSheetDefaults.DragHandle(color = accentColor.copy(alpha = 0.4f)) }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 10.dp)
-                    .navigationBarsPadding(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            modifier = Modifier.border(2.dp, accentColor, RoundedCornerShape(24.dp)),
+            containerColor = Color.White,
+            shape = RoundedCornerShape(24.dp),
+            title = { Text(if (parentName != null) "افزودن فرزند برای $parentName" else "افزودن عضو جدید به شجره‌نامه", fontWeight = FontWeight.Bold, color = textColor) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = if (parentName != null) "افزودن فرزند برای $parentName" else "افزودن عضو جدید به شجره‌نامه",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = textColor,
-                    fontWeight = FontWeight.Bold
-                )
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = false),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
                 item {
                     AppTextField(
                         value = firstName,
@@ -4757,50 +4670,42 @@ fun AddPersonDialog(
                         }
                     }
                 }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val context = androidx.compose.ui.platform.LocalContext.current
-                    Button(
-                        onClick = {
-                            if (firstName.trim().isBlank() || lastName.trim().isBlank()) {
-                                Toast.makeText(context, "تکمیل کادرهای نام و نام خانوادگی اجباری است", Toast.LENGTH_LONG).show()
-                            } else {
-                                onConfirm(
-                                    firstName.trim(),
-                                    lastName.trim(),
-                                    gender,
-                                    if (hasBirthDate) birthDateInput.ifBlank { null } else null,
-                                    birthPlace.ifBlank { null },
-                                    if (isDeceased && hasDeathDate) deathDateInput.ifBlank { null } else null,
-                                    if (isDeceased) deathPlace.ifBlank { null } else null,
-                                    isDeceased,
-                                    occupation.ifBlank { null },
-                                    biography.ifBlank { null },
-                                    selectedGroupIdForPerson,
-                                    selectedSpouseId
-                                )
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("ثبت عضو")
+            }
+        },
+        confirmButton = {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            Button(
+                onClick = {
+                    if (firstName.trim().isBlank() || lastName.trim().isBlank()) {
+                        Toast.makeText(context, "تکمیل کادرهای نام و نام خانوادگی اجباری است", Toast.LENGTH_LONG).show()
+                    } else {
+                        onConfirm(
+                            firstName.trim(),
+                            lastName.trim(),
+                            gender,
+                            if (hasBirthDate) birthDateInput.ifBlank { null } else null,
+                            birthPlace.ifBlank { null },
+                            if (isDeceased && hasDeathDate) deathDateInput.ifBlank { null } else null,
+                            if (isDeceased) deathPlace.ifBlank { null } else null,
+                            isDeceased,
+                            occupation.ifBlank { null },
+                            biography.ifBlank { null },
+                            selectedGroupIdForPerson,
+                            selectedSpouseId
+                        )
                     }
-
-                    TextButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("انصراف", color = textColor)
-                    }
-                }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+            ) {
+                Text("ثبت عضو")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("انصراف", color = textColor)
             }
         }
+    )
     }
 }
 
@@ -5215,12 +5120,10 @@ fun EditPersonDialog(
 fun AddSpouseDialog(
     spouseOf: Person,
     groups: List<com.example.data.FamilyGroup>,
-    children: List<Person> = emptyList(),
-    preselectedChildIds: List<Long> = emptyList(),
     textColor: Color,
     accentColor: Color,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, String?, String?, String?, String?, Boolean, String?, String?, Long?, String, List<Long>) -> Unit
+    onConfirm: (String, String, String, String?, String?, String?, String?, Boolean, String?, String?, Long?, String) -> Unit
 ) {
     val defaultGender = if (spouseOf.gender == "Male") "Female" else "Male"
     var firstName by remember { mutableStateOf("") }
@@ -5238,7 +5141,6 @@ fun AddSpouseDialog(
     var selectedGroupIdForPerson by remember { mutableStateOf<Long?>(spouseOf.groupId) }
     var isSecondSpouse by remember { mutableStateOf(false) }
     var isDivorced by remember { mutableStateOf(false) }
-    var selectedChildIds by remember { mutableStateOf(preselectedChildIds.toSet()) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         AlertDialog(
@@ -5378,54 +5280,6 @@ fun AddSpouseDialog(
                     )
                 }
                 
-                // Shared children selector (Bug #2)
-                if (children.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "انتخاب فرزندان مشترک با همسر جدید (در صورت وجود):",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = textColor
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-                    children.forEach { child ->
-                        item(key = "child_${child.id}") {
-                            val isSelected = selectedChildIds.contains(child.id)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        selectedChildIds = if (isSelected) {
-                                            selectedChildIds - child.id
-                                        } else {
-                                            selectedChildIds + child.id
-                                        }
-                                    }
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = isSelected,
-                                    onCheckedChange = { checked ->
-                                        selectedChildIds = if (checked == true) {
-                                            selectedChildIds + child.id
-                                        } else {
-                                            selectedChildIds - child.id
-                                        }
-                                    }
-                                )
-                                Text(
-                                    text = child.fullName,
-                                    color = textColor,
-                                    fontSize = 13.sp
-                                )
-                            }
-                        }
-                    }
-                }
-
                 // Group selector
                 item {
                     Text("گروه فامیلی همسر:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = textColor)
@@ -5489,8 +5343,7 @@ fun AddSpouseDialog(
                             occupation.ifBlank { null },
                             biography.ifBlank { null },
                             selectedGroupIdForPerson,
-                            relType,
-                            selectedChildIds.toList()
+                            relType
                         )
                     }
                 },
@@ -6611,6 +6464,8 @@ fun CalculatorDialog(
     var p1Dropdown by remember { mutableStateOf(false) }
     var p2Dropdown by remember { mutableStateOf(false) }
 
+    var calculatedRelation by remember { mutableStateOf<String?>(null) }
+
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -6647,6 +6502,7 @@ fun CalculatorDialog(
                                     onClick = {
                                         p1 = p
                                         p1Dropdown = false
+                                        calculatedRelation = null
                                     }
                                 )
                             }
@@ -6672,6 +6528,7 @@ fun CalculatorDialog(
                                     onClick = {
                                         p2 = p
                                         p2Dropdown = false
+                                        calculatedRelation = null
                                     }
                                 )
                             }
@@ -6683,6 +6540,7 @@ fun CalculatorDialog(
                     val computed = remember(p1, p2, persons, relationships) {
                         RelationshipCalculator.getRelationshipLabel(p1!!, p2!!, persons, relationships)
                     }
+                    calculatedRelation = computed
 
                     Card(
                         colors = CardDefaults.cardColors(containerColor = accentColor.copy(alpha = 0.1f)),
@@ -6732,151 +6590,28 @@ fun AppTextField(
     testTag: String? = null
 ) {
     val finalModifier = if (testTag != null) modifier.testTag(testTag) else modifier
-    val textColor = FamilyTreeTheme.colors.textPrimary
-    val primaryColor = FamilyTreeTheme.colors.primary
-    val borderCol = FamilyTreeTheme.colors.lineEffectColor
-    val fieldBg = FamilyTreeTheme.colors.surfaceVariant.copy(alpha = 0.3f)
-
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label, fontSize = 11.sp, color = textColor.copy(alpha = 0.7f)) },
-        placeholder = placeholder?.let { { Text(it, fontSize = 11.sp, color = textColor.copy(alpha = 0.5f)) } },
+        label = { Text(label, fontSize = 11.sp, color = Color(0xFF112E21).copy(alpha = 0.7f)) },
+        placeholder = placeholder?.let { { Text(it, fontSize = 11.sp, color = Color(0xFF112E21).copy(alpha = 0.5f)) } },
         leadingIcon = leadingIcon,
         maxLines = maxLines,
         singleLine = maxLines == 1,
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = textColor,
-            unfocusedTextColor = textColor,
-            focusedLabelColor = primaryColor,
-            unfocusedLabelColor = textColor.copy(alpha = 0.6f),
-            focusedBorderColor = primaryColor,
-            unfocusedBorderColor = borderCol,
-            focusedContainerColor = fieldBg,
-            unfocusedContainerColor = fieldBg,
-            cursorColor = primaryColor
+            focusedTextColor = Color(0xFF112E21),
+            unfocusedTextColor = Color(0xFF112E21),
+            focusedLabelColor = Color(0xFF4CAF50),
+            unfocusedLabelColor = Color(0xFF112E21).copy(alpha = 0.6f),
+            focusedBorderColor = Color(0xFF4CAF50),
+            unfocusedBorderColor = Color(0xFFCBE3D8),
+            focusedContainerColor = Color(0xFFF9FBF9),
+            unfocusedContainerColor = Color(0xFFF9FBF9),
+            cursorColor = Color(0xFF4CAF50)
         ),
         modifier = finalModifier.fillMaxWidth()
     )
-}
-
-@Composable
-fun GroupSelectorField(
-    selectedGroupId: Long?,
-    allGroups: List<com.example.data.FamilyGroup>,
-    onGroupSelected: (Long) -> Unit,
-    textColor: Color = FamilyTreeTheme.colors.textPrimary,
-    accentColor: Color = FamilyTreeTheme.colors.primary,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val selectedGroup = allGroups.find { it.id == selectedGroupId }
-    val displayText = selectedGroup?.name ?: "انتخاب گروه فامیلی..."
-
-    Box(modifier = modifier.fillMaxWidth()) {
-        OutlinedButton(
-            onClick = { expanded = true },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = textColor
-            ),
-            border = BorderStroke(1.dp, accentColor.copy(alpha = 0.5f))
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(displayText, fontSize = 13.sp)
-                Icon(
-                    imageVector = Icons.Default.ArrowDropDown,
-                    contentDescription = null,
-                    tint = accentColor
-                )
-            }
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.background(FamilyTreeTheme.colors.surface)
-        ) {
-            allGroups.forEach { group ->
-                DropdownMenuItem(
-                    text = { Text(group.name, color = textColor) },
-                    onClick = {
-                        onGroupSelected(group.id)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun LabeledCheckbox(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    label: String,
-    textColor: Color = FamilyTreeTheme.colors.textPrimary,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
-            .padding(vertical = 4.dp)
-    ) {
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = CheckboxDefaults.colors(
-                checkedColor = FamilyTreeTheme.colors.primary,
-                checkmarkColor = FamilyTreeTheme.colors.surface
-            )
-        )
-        Text(label, color = textColor, fontSize = 13.sp)
-    }
-}
-
-@Composable
-fun InfoPill(
-    text: String,
-    icon: ImageVector? = null,
-    textColor: Color = FamilyTreeTheme.colors.textPrimary,
-    backgroundColor: Color = FamilyTreeTheme.colors.surfaceVariant,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .background(backgroundColor, RoundedCornerShape(8.dp))
-            .border(0.5.dp, textColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = textColor.copy(alpha = 0.8f),
-                    modifier = Modifier.size(12.dp)
-                )
-            }
-            Text(
-                text = text,
-                fontSize = 11.sp,
-                color = textColor,
-                fontWeight = FontWeight.Medium
-            )
-        }
-    }
 }
 
 @Composable

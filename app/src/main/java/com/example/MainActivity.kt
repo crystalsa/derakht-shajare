@@ -8,7 +8,6 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.example.data.FamilyDatabase
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.FamilyViewModel
@@ -19,7 +18,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
         setContent {
             MyApplicationTheme {
                 Surface(
