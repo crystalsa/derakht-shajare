@@ -52,30 +52,58 @@ jobs:
     - name: Build Debug APK
       run: gradle :app:assembleDebug -Pkotlin.compiler.execution.strategy=daemon --no-configuration-cache
 
+    - name: Prepare Renamed APK
+      run: cp app/build/outputs/apk/debug/app-debug.apk "./شجره نامه.apk"
+
     - name: Upload Debug APK (Artifact)
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: shajareh-nameh-apk
+        path: "./شجره نامه.apk"
 
     - name: Publish GitHub Release
       if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        echo "Creating release tag..."
+        echo "Determining next version tag..."
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         
-        # Delete existing 'latest' tag and release if present to update it
-        gh release delete latest --yes || true
-        git tag -d latest || true
-        git push --delete origin latest || true
+        # Fetch tags
+        git fetch --tags --force || true
         
-        # Create tag and release
-        git tag latest
-        git push origin latest
-        gh release create latest app/build/outputs/apk/debug/app-debug.apk \
-          --title "Latest Build" \
-          --notes "This release contains the latest debug APK built automatically by GitHub Actions." \
-          --prerelease
+        # Get the latest tag that fits our vX.XX format
+        latest_tag=$(gh release list --limit 20 | awk '{print $1}' | grep -E '^v[0-9]+\.[0-9]+$' | head -n 1 || echo "")
+        
+        if [ -z "$latest_tag" ]; then
+          latest_tag="v0.00"
+        fi
+        
+        echo "Latest version tag found: $latest_tag"
+        
+        version_num=${latest_tag#v}
+        major=$(echo "$version_num" | cut -d. -f1)
+        minor=$(echo "$version_num" | cut -d. -f2)
+        
+        if ! [[ "$major" =~ ^[0-9]+$ ]] || ! [[ "$minor" =~ ^[0-9]+$ ]]; then
+          major=0
+          minor=0
+        fi
+        
+        minor_clean=${minor#0}
+        minor_clean=${minor_clean:-0}
+        
+        next_minor=$((minor_clean + 1))
+        next_minor_formatted=$(printf "%02d" $next_minor)
+        
+        next_tag="v${major}.${next_minor_formatted}"
+        echo "Next release tag will be: $next_tag"
+        
+        # Create tag and release on GitHub
+        git tag "$next_tag"
+        git push origin "$next_tag"
+        
+        gh release create "$next_tag" "./شجره نامه.apk" \
+          --title "شجره نامه نسخه $next_tag" \
+          --notes "تغییرات این نسخه به صورت خودکار در این شجره نامه ثبت و فایل نصبی ایجاد شده است."
