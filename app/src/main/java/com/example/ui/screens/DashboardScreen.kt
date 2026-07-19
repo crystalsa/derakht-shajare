@@ -768,7 +768,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                                                  ) {
                                                      if (!featuredPhoto.isNullOrBlank()) {
                                                          Image(
-                                                             painter = rememberAsyncImagePainter(model = featuredPhoto),
+                                                             painter = rememberAsyncImagePainter(model = java.io.File(featuredPhoto)),
                                                              contentDescription = null,
                                                              modifier = Modifier.fillMaxSize(),
                                                              contentScale = ContentScale.Crop
@@ -1729,7 +1729,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     }
 
     if (selectedPersonForDetails != null) {
-        val person = selectedPersonForDetails!!
+        val person = allPersonsRaw.find { it.id == selectedPersonForDetails!!.id } ?: selectedPersonForDetails!!
         
         MemberDetailsDialog(
             person = person,
@@ -1930,10 +1930,11 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                                         cropSizePx = cropSizePx
                                     )
                                     if (croppedPath != null && personForPhotoEdit != null) {
-                                        val currentUris = personForPhotoEdit!!.photoUris.toMutableList()
+                                        val freshPerson = allPersonsRaw.find { it.id == personForPhotoEdit!!.id } ?: personForPhotoEdit!!
+                                        val currentUris = freshPerson.photoUris.toMutableList()
                                         currentUris.add(croppedPath)
                                         val newPhotoUri = currentUris.joinToString("|")
-                                        val updatedPerson = personForPhotoEdit!!.copy(photoUri = newPhotoUri)
+                                        val updatedPerson = freshPerson.copy(photoUri = newPhotoUri)
                                         viewModel.updatePerson(updatedPerson)
                                         Toast.makeText(context, "عکس با موفقیت ذخیره شد", Toast.LENGTH_SHORT).show()
                                     } else {
@@ -2026,7 +2027,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                             if (activePhotoPath != null) {
                                 val fullPhotoPath = getFullOrOriginalPhotoPath(activePhotoPath)
                                 Image(
-                                    painter = rememberAsyncImagePainter(model = fullPhotoPath),
+                                    painter = rememberAsyncImagePainter(model = java.io.File(fullPhotoPath)),
                                     contentDescription = "تصویر کامل",
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -2168,13 +2169,17 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                         if (uris.isNotEmpty()) {
                             androidx.compose.material3.FilledTonalButton(
                                 onClick = {
-                                    val currentUris = person.photoUris.toMutableList()
+                                    val freshPerson = allPersonsRaw.find { it.id == person.id } ?: person
+                                    val currentUris = freshPerson.photoUris.toMutableList()
                                     if (currentUris.isNotEmpty() && currentImageIndex in currentUris.indices) {
                                         currentUris.removeAt(currentImageIndex)
                                         val newPhotoUri = if (currentUris.isEmpty()) null else currentUris.joinToString("|")
-                                        val updatedPerson = person.copy(photoUri = newPhotoUri)
+                                        val updatedPerson = freshPerson.copy(photoUri = newPhotoUri)
                                         viewModel.updatePerson(updatedPerson)
                                         Toast.makeText(context, "عکس با موفقیت حذف شد", Toast.LENGTH_SHORT).show()
+                                        if (currentImageIndex >= currentUris.size && currentImageIndex > 0) {
+                                            currentImageIndex--
+                                        }
                                     }
                                 },
                                 modifier = Modifier
@@ -2265,7 +2270,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
 
                 if (fullImmersivePath.isNotEmpty()) {
                     Image(
-                        painter = rememberAsyncImagePainter(model = fullImmersivePath),
+                        painter = rememberAsyncImagePainter(model = java.io.File(fullImmersivePath)),
                         contentDescription = "تصویر تمام صفحه",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit
@@ -3747,11 +3752,7 @@ fun FamilyMemberNodeCard(
                 modifier
             }
         }
-        .pointerInput(person.id) {
-            detectTapGestures(
-                onTap = { onClick() }
-            )
-        }
+        .clickable { onClick() }
         .testTag("member_node_${person.id}")
 
     Card(
@@ -3828,16 +3829,12 @@ fun FamilyMemberNodeCard(
                             if (person.gender == "Male") Color(0xFFE3F2FD) else Color(0xFFFCE4EC)
                         )
                         .border(1.5.dp, if (person.photoUris.isNotEmpty()) accentColor else Color.Transparent, CircleShape)
-                        .pointerInput(person.id) {
-                            detectTapGestures(
-                                onTap = { onPhotoClick(person) }
-                            )
-                        },
+                        .clickable { onPhotoClick(person) },
                     contentAlignment = Alignment.Center
                 ) {
                     if (person.photoUris.isNotEmpty()) {
                         Image(
-                            painter = rememberAsyncImagePainter(model = person.photoUris.firstOrNull()),
+                            painter = rememberAsyncImagePainter(model = person.photoUris.firstOrNull()?.let { java.io.File(it) }),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
@@ -6316,7 +6313,7 @@ fun MemberDetailsDialog(
                     ) {
                         if (person.photoUris.isNotEmpty()) {
                             Image(
-                                painter = rememberAsyncImagePainter(model = person.photoUris.firstOrNull()),
+                                painter = rememberAsyncImagePainter(model = person.photoUris.firstOrNull()?.let { java.io.File(it) }),
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop

@@ -100,10 +100,16 @@ jobs:
         next_tag="v${major}.${next_minor_formatted}"
         echo "Next release tag will be: $next_tag"
         
+        # Get last commit message as release notes
+        commit_msg=$(git log -1 --pretty=%B | head -n 1)
+        if [ -z "$commit_msg" ] || [[ "$commit_msg" == *"Merge"* ]]; then
+          commit_msg="بهبود کارایی و رفع مشکلات عکس‌ها و گالری شجره‌نامه"
+        fi
+
         # Create tag and release on GitHub
         git tag "$next_tag"
         git push origin "$next_tag"
         
         gh release create "$next_tag" "./شجره نامه.apk" \
-          --title "شجره نامه نسخه $next_tag" \
-          --notes "تغییرات این نسخه به صورت خودکار در این شجره نامه ثبت و فایل نصبی ایجاد شده است."
+          --title "شجره نامه - نسخه $next_tag" \
+          --notes "$commit_msg"
