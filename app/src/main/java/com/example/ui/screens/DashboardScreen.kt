@@ -16,6 +16,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.animation.core.Animatable
@@ -86,6 +89,24 @@ fun isSecondSpouseRelation(type: String): Boolean {
     return type == "SecondSpouse" || type == "SecondSpouse_Divorced"
 }
 
+val Person.photoUris: List<String>
+    get() = if (photoUri.isNullOrBlank()) emptyList() else photoUri.split('|').filter { it.isNotBlank() }
+
+fun getFullOrOriginalPhotoPath(photoPath: String): String {
+    try {
+        val file = java.io.File(photoPath)
+        if (file.name.startsWith("person_cropped_")) {
+            val originalFile = java.io.File(file.parent, file.name.replace("person_cropped_", "person_original_"))
+            if (originalFile.exists()) {
+                return originalFile.absolutePath
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    return photoPath
+}
+
 fun cropAndSaveBitmap(
     context: android.content.Context,
     originalBitmap: android.graphics.Bitmap,
@@ -131,13 +152,19 @@ fun cropAndSaveBitmap(
         if (!directory.exists()) {
             directory.mkdirs()
         }
-        val file = java.io.File(directory, "person_${System.currentTimeMillis()}.jpg")
-        val outputStream = java.io.FileOutputStream(file)
-        croppedBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, outputStream)
-        outputStream.flush()
-        outputStream.close()
+        val timestamp = System.currentTimeMillis()
+        val croppedFile = java.io.File(directory, "person_cropped_$timestamp.jpg")
+        val originalFile = java.io.File(directory, "person_original_$timestamp.jpg")
 
-        return file.absolutePath
+        java.io.FileOutputStream(croppedFile).use { out ->
+            croppedBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+        }
+
+        java.io.FileOutputStream(originalFile).use { out ->
+            originalBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+        }
+
+        return croppedFile.absolutePath
     } catch (e: Exception) {
         e.printStackTrace()
         return null
@@ -167,6 +194,11 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     // Group & Spouse states
     val allGroups by viewModel.allGroups.collectAsStateWithLifecycle()
     val selectedGroupId by viewModel.selectedGroupId.collectAsStateWithLifecycle()
+
+    // Group Drag-Reorder states
+    var draggingGroupIndex by remember { mutableStateOf<Int?>(null) }
+    var dragGroupOffset by remember { mutableStateOf(0f) }
+    var orderedGroupsList by remember(allGroups) { mutableStateOf(allGroups) }
 
     // Modals & form state
     var showAddPersonDialog by remember { mutableStateOf(false) }
@@ -198,6 +230,21 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     var tempExportGroupId by remember { mutableStateOf<Long?>(null) }
     var backupFileNameInput by remember { mutableStateOf("بکاپ_کامل_خاندان") }
     var backupJsonToSave by remember { mutableStateOf("") }
+
+    var showSelectGroupRestoreDialog by remember { mutableStateOf(false) }
+    var restoreJsonPending by remember { mutableStateOf<String?>(null) }
+    var showImmersivePhoto by remember { mutableStateOf<String?>(null) }
+    var immersivePhotoIndex by remember { mutableStateOf<Int?>(null) }
+    var immersivePhotoUris by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    val onRestoreBackupText = { jsonText: String ->
+        viewModel.importBackupFromJson(jsonText, null) { success, msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            if (success) {
+                showRestoreDialog = false
+            }
+        }
+    }
 
     // Sub-member & relationship transfer states
     var personToSubMemberOf by remember { mutableStateOf<Person?>(null) }
@@ -255,20 +302,23 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
                     val jsonText = inputStream.bufferedReader().use { it.readText() }
                     if (isRestoringSubtree) {
+                        if (selectedGroupId == null) {
+                            Toast.makeText(context, "جهت بازیابی بکاپ عضو، ابتدا باید یک گروه فامیلی ساخته و انتخاب کرده باشید.", Toast.LENGTH_LONG).show()
+                            isRestoringSubtree = false
+                            return@rememberLauncherForActivityResult
+                        }
                         viewModel.importSubtreeBackupFromJson(jsonText) { success, msg, newGroupId ->
                             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                             if (success) {
+                                if (newGroupId != null) {
+                                    viewModel.setSelectedGroupId(newGroupId)
+                                }
                                 showSubtreeRestoreDialog = false
                             }
                             isRestoringSubtree = false
                         }
                     } else {
-                        viewModel.importBackupFromJson(jsonText) { success, msg ->
-                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                            if (success) {
-                                showRestoreDialog = false
-                            }
-                        }
+                        onRestoreBackupText(jsonText)
                     }
                 }
             } catch (e: Exception) {
@@ -359,7 +409,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                                 leadingIcon = { Icon(Icons.Default.Save, contentDescription = null, tint = accentColor) }
                             )
                             DropdownMenuItem(
-                                text = { Text("بازگردانی بکاپ کلی", color = textColor) },
+                                text = { Text("بازیابی بکاپ", color = textColor) },
                                 onClick = { showRestoreDialog = true; showSettingsMenu = false },
                                 leadingIcon = { Icon(Icons.Default.Publish, contentDescription = null, tint = accentColor) }
                             )
@@ -436,63 +486,119 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
                     .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Each Group Chip
-                allGroups.forEach { group ->
-                    val isSelected = selectedGroupId == group.id
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.setSelectedGroupId(group.id) },
-                        label = { Text(group.name, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = accentColor.copy(alpha = 0.9f),
-                            selectedLabelColor = Color.White,
-                            containerColor = Color.White,
-                            labelColor = textColor
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            borderColor = lineEffectColor,
-                            selectedBorderColor = accentColor
-                        )
-                    )
-                }
-
-                // Add Group Chip Button
-                InputChip(
-                    selected = false,
-                    onClick = { showAddGroupDialog = true },
-                    label = { Text("ایجاد گروه فامیلی جدید +", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                    colors = InputChipDefaults.inputChipColors(
-                        containerColor = Color(0xFFFFF3E0),
-                        labelColor = Color(0xFFE65100)
-                    ),
-                    border = BorderStroke(1.dp, Color(0xFFFFB74D))
-                )
-
-                // Edit active group button
+                // Edit active group button - Fixed on the right (start of RTL)
                 if (selectedGroupId != null) {
                     val currentGroup = allGroups.find { it.id == selectedGroupId }
                     if (currentGroup != null) {
                         IconButton(
                             onClick = { groupToEdit = currentGroup },
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(36.dp)
                                 .background(accentColor.copy(alpha = 0.15f), CircleShape)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = "ویرایش مشخصات گروه فعلی",
                                 tint = accentColor,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
+                }
+
+                // Scrollable container for the groups
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Render the ordered groups
+                    orderedGroupsList.forEachIndexed { index, group ->
+                        val isSelected = selectedGroupId == group.id
+                        val isDraggingThis = draggingGroupIndex == index
+                        val translationX = if (isDraggingThis) dragGroupOffset else 0f
+                        
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.setSelectedGroupId(group.id) },
+                            label = { Text(group.name, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = accentColor.copy(alpha = 0.9f),
+                                selectedLabelColor = Color.White,
+                                containerColor = Color.White,
+                                labelColor = textColor
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = lineEffectColor,
+                                selectedBorderColor = accentColor
+                            ),
+                            modifier = Modifier
+                                .offset { IntOffset(translationX.roundToInt(), 0) }
+                                .pointerInput(index) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = { offset: Offset ->
+                                            draggingGroupIndex = index
+                                            dragGroupOffset = 0f
+                                        },
+                                        onDrag = { change: PointerInputChange, dragAmount: Offset ->
+                                            change.consume()
+                                            dragGroupOffset += dragAmount.x
+                                            
+                                            val dragIndex = draggingGroupIndex
+                                            if (dragIndex != null) {
+                                                val threshold = 150f
+                                                if (dragGroupOffset < -threshold && dragIndex < orderedGroupsList.size - 1) {
+                                                    val newList = orderedGroupsList.toMutableList()
+                                                    val temp = newList[dragIndex]
+                                                    newList[dragIndex] = newList[dragIndex + 1]
+                                                    newList[dragIndex + 1] = temp
+                                                    orderedGroupsList = newList
+                                                    draggingGroupIndex = dragIndex + 1
+                                                    dragGroupOffset += threshold
+                                                } else if (dragGroupOffset > threshold && dragIndex > 0) {
+                                                    val newList = orderedGroupsList.toMutableList()
+                                                    val temp = newList[dragIndex]
+                                                    newList[dragIndex] = newList[dragIndex - 1]
+                                                    newList[dragIndex - 1] = temp
+                                                    orderedGroupsList = newList
+                                                    draggingGroupIndex = dragIndex - 1
+                                                    dragGroupOffset -= threshold
+                                                }
+                                            }
+                                        },
+                                        onDragEnd = {
+                                            draggingGroupIndex = null
+                                            dragGroupOffset = 0f
+                                            viewModel.updateGroupOrder(orderedGroupsList)
+                                        },
+                                        onDragCancel = {
+                                            draggingGroupIndex = null
+                                            dragGroupOffset = 0f
+                                        }
+                                    )
+                                }
+                        )
+                    }
+
+                    // Add Group Chip Button - always at the far left (end of scrollable row)
+                    InputChip(
+                        selected = false,
+                        onClick = { showAddGroupDialog = true },
+                        label = { Text("ایجاد گروه فامیلی جدید +", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        colors = InputChipDefaults.inputChipColors(
+                            containerColor = Color(0xFFFFF3E0),
+                            labelColor = Color(0xFFE65100)
+                        ),
+                        border = BorderStroke(1.dp, Color(0xFFFFB74D))
+                    )
                 }
             }
 
@@ -637,13 +743,13 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                                              horizontalArrangement = Arrangement.spacedBy(12.dp)
                                          ) {
                                              // Avatar with a badge
-                                             val featuredPhoto = featuredPerson?.photoUri
+                                             val featuredPhoto = featuredPerson?.photoUris?.firstOrNull()
                                              Box(
                                                  modifier = Modifier
                                                      .size(56.dp)
                                                      .clickable {
                                                          if (featuredPerson != null) {
-                                                             if (!featuredPerson.photoUri.isNullOrBlank()) {
+                                                             if (featuredPerson.photoUris.isNotEmpty()) {
                                                                  showFullPhotoDialog = featuredPerson
                                                              } else {
                                                                  personForPhotoEdit = featuredPerson
@@ -968,7 +1074,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                                             },
                                             onAddFirstPerson = onAddPersonTrigger,
                                             onPhotoClick = { person ->
-                                                if (!person.photoUri.isNullOrBlank()) {
+                                                if (person.photoUris.isNotEmpty()) {
                                                     showFullPhotoDialog = person
                                                 } else {
                                                     personForPhotoEdit = person
@@ -1021,7 +1127,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                                 },
                                 onAddFirstPerson = onAddPersonTrigger,
                                 onPhotoClick = { person ->
-                                    if (!person.photoUri.isNullOrBlank()) {
+                                    if (person.photoUris.isNotEmpty()) {
                                         showFullPhotoDialog = person
                                     } else {
                                         personForPhotoEdit = person
@@ -1533,7 +1639,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                     },
                     onAddFirstPerson = onAddPersonTrigger,
                     onPhotoClick = { person ->
-                        if (!person.photoUri.isNullOrBlank()) {
+                        if (person.photoUris.isNotEmpty()) {
                             showFullPhotoDialog = person
                         } else {
                             personForPhotoEdit = person
@@ -1685,7 +1791,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                 selectedPersonForDetails = null
             },
             onPhotoClick = { person ->
-                if (!person.photoUri.isNullOrBlank()) {
+                if (person.photoUris.isNotEmpty()) {
                     showFullPhotoDialog = person
                 } else {
                     personForPhotoEdit = person
@@ -1824,7 +1930,10 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                                         cropSizePx = cropSizePx
                                     )
                                     if (croppedPath != null && personForPhotoEdit != null) {
-                                        val updatedPerson = personForPhotoEdit!!.copy(photoUri = croppedPath)
+                                        val currentUris = personForPhotoEdit!!.photoUris.toMutableList()
+                                        currentUris.add(croppedPath)
+                                        val newPhotoUri = currentUris.joinToString("|")
+                                        val updatedPerson = personForPhotoEdit!!.copy(photoUri = newPhotoUri)
                                         viewModel.updatePerson(updatedPerson)
                                         Toast.makeText(context, "عکس با موفقیت ذخیره شد", Toast.LENGTH_SHORT).show()
                                     } else {
@@ -1856,7 +1965,10 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     }
 
     if (showFullPhotoDialog != null) {
-        val person = showFullPhotoDialog!!
+        val person = allPersonsRaw.find { it.id == showFullPhotoDialog!!.id } ?: showFullPhotoDialog!!
+        val uris = person.photoUris
+        var currentImageIndex by remember(person.id, uris.size) { mutableStateOf(0) }
+        
         Dialog(onDismissRequest = { showFullPhotoDialog = null }) {
             Card(
                 modifier = Modifier
@@ -1874,84 +1986,366 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        text = "تصویر ${person.fullName}",
+                        text = "گالری تصاویر ${person.fullName}",
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
                         color = textColor
                     )
 
-                    // Big circular photo with stroke
+                    // Big square/circle photo container
                     Box(
                         modifier = Modifier
-                            .size(200.dp)
-                            .clip(CircleShape)
+                            .size(240.dp)
+                            .clip(RoundedCornerShape(16.dp))
                             .background(Color(0xFFEEEEEE))
-                            .border(3.dp, accentColor, CircleShape),
+                            .border(3.dp, accentColor, RoundedCornerShape(16.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Image(
-                            painter = rememberAsyncImagePainter(model = person.photoUri),
-                            contentDescription = "تصویر کامل",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
+                        if (uris.isEmpty()) {
+                            // Empty state
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = textColor.copy(alpha = 0.2f),
+                                    modifier = Modifier.size(80.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "هیچ عکسی ثبت نشده است",
+                                    color = textColor.copy(alpha = 0.5f),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else {
+                            val activePhotoPath = uris.getOrNull(currentImageIndex)
+                            if (activePhotoPath != null) {
+                                val fullPhotoPath = getFullOrOriginalPhotoPath(activePhotoPath)
+                                Image(
+                                    painter = rememberAsyncImagePainter(model = fullPhotoPath),
+                                    contentDescription = "تصویر کامل",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clickable { 
+                                            immersivePhotoUris = uris
+                                            immersivePhotoIndex = currentImageIndex
+                                        }
+                                        .pointerInput(Unit) {
+                                            var totalDrag = 0f
+                                            detectDragGestures(
+                                                onDragStart = { totalDrag = 0f },
+                                                onDragEnd = {
+                                                    if (totalDrag > 100f) {
+                                                        currentImageIndex = (currentImageIndex - 1 + uris.size) % uris.size
+                                                    } else if (totalDrag < -100f) {
+                                                        currentImageIndex = (currentImageIndex + 1) % uris.size
+                                                    }
+                                                },
+                                                onDragCancel = { totalDrag = 0f },
+                                                onDrag = { _, dragAmount ->
+                                                    totalDrag += dragAmount.x
+                                                }
+                                            )
+                                        },
+                                    contentScale = ContentScale.Crop
+                                )
+                                
+                                // Text indicator overlayed at top right: e.g. "۱ از ۳"
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(8.dp)
+                                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "${currentImageIndex + 1} از ${uris.size}",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                     }
 
-                    // Options: Change Photo, Delete Photo, Close
-                    Row(
+                    // Swipe/Pagination Buttons (Next / Prev)
+                    if (uris.size > 1) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    currentImageIndex = (currentImageIndex - 1 + uris.size) % uris.size
+                                },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(accentColor.copy(alpha = 0.15f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowLeft,
+                                    contentDescription = "قبلی",
+                                    tint = accentColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            // Dot page indicators
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                repeat(uris.size) { index ->
+                                    val isActive = index == currentImageIndex
+                                    Box(
+                                        modifier = Modifier
+                                            .size(if (isActive) 8.dp else 6.dp)
+                                            .background(
+                                                if (isActive) accentColor else Color.LightGray,
+                                                CircleShape
+                                            )
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    currentImageIndex = (currentImageIndex + 1) % uris.size
+                                },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(accentColor.copy(alpha = 0.15f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowRight,
+                                    contentDescription = "بعدی",
+                                    tint = accentColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Options: Stacked vertically for ample space and beautiful appearance
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // Change photo
+                        // Add photo
                         Button(
                             onClick = {
                                 personForPhotoEdit = person
-                                showFullPhotoDialog = null
                                 photoPickerLauncher.launch("image/*")
                             },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = accentColor)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
-                                Text("تغییر", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
+                            Icon(
+                                imageVector = Icons.Default.AddAPhoto,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "افزودن عکس جدید",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
 
                         // Delete photo
-                        Button(
-                            onClick = {
-                                val updatedPerson = person.copy(photoUri = null)
-                                viewModel.updatePerson(updatedPerson)
-                                Toast.makeText(context, "عکس با موفقیت حذف شد", Toast.LENGTH_SHORT).show()
-                                showFullPhotoDialog = null
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935))
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        if (uris.isNotEmpty()) {
+                            androidx.compose.material3.FilledTonalButton(
+                                onClick = {
+                                    val currentUris = person.photoUris.toMutableList()
+                                    if (currentUris.isNotEmpty() && currentImageIndex in currentUris.indices) {
+                                        currentUris.removeAt(currentImageIndex)
+                                        val newPhotoUri = if (currentUris.isEmpty()) null else currentUris.joinToString("|")
+                                        val updatedPerson = person.copy(photoUri = newPhotoUri)
+                                        viewModel.updatePerson(updatedPerson)
+                                        Toast.makeText(context, "عکس با موفقیت حذف شد", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = Color(0xFFFEEBEE),
+                                    contentColor = Color(0xFFD32F2F)
+                                )
                             ) {
-                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
-                                Text("حذف", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = Color(0xFFD32F2F)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "حذف عکس فعلی",
+                                    color = Color(0xFFD32F2F),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
 
-                        // Close
+                        // Close Button full-width below
                         OutlinedButton(
                             onClick = { showFullPhotoDialog = null },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color.LightGray.copy(alpha = 0.6f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = textColor)
                         ) {
-                            Text("بستن", color = textColor, fontSize = 11.sp)
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = textColor
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "بستن گالری",
+                                color = textColor,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    if (immersivePhotoIndex != null && immersivePhotoUris.isNotEmpty()) {
+        Dialog(onDismissRequest = { immersivePhotoIndex = null }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .pointerInput(Unit) {
+                        var totalDrag = 0f
+                        detectDragGestures(
+                            onDragStart = { totalDrag = 0f },
+                            onDragEnd = {
+                                if (totalDrag > 100f) {
+                                    val nextIndex = (immersivePhotoIndex!! - 1 + immersivePhotoUris.size) % immersivePhotoUris.size
+                                    immersivePhotoIndex = nextIndex
+                                } else if (totalDrag < -100f) {
+                                    val nextIndex = (immersivePhotoIndex!! + 1) % immersivePhotoUris.size
+                                    immersivePhotoIndex = nextIndex
+                                }
+                            },
+                            onDragCancel = { totalDrag = 0f },
+                            onDrag = { _, dragAmount ->
+                                totalDrag += dragAmount.x
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                val activeIndex = immersivePhotoIndex!!
+                val activePath = immersivePhotoUris.getOrNull(activeIndex)
+                val fullImmersivePath = if (activePath != null) getFullOrOriginalPhotoPath(activePath) else ""
+
+                if (fullImmersivePath.isNotEmpty()) {
+                    Image(
+                        painter = rememberAsyncImagePainter(model = fullImmersivePath),
+                        contentDescription = "تصویر تمام صفحه",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+                
+                // Close button
+                IconButton(
+                    onClick = { immersivePhotoIndex = null },
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(16.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "بستن تمام صفحه",
+                        tint = Color.White
+                    )
+                }
+
+                if (immersivePhotoUris.size > 1) {
+                    // Outward-pointing Arrows (KeyboardArrowLeft and KeyboardArrowRight)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .align(Alignment.Center),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = {
+                                val nextIndex = (immersivePhotoIndex!! - 1 + immersivePhotoUris.size) % immersivePhotoUris.size
+                                immersivePhotoIndex = nextIndex
+                            },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowLeft,
+                                contentDescription = "قبلی",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                val nextIndex = (immersivePhotoIndex!! + 1) % immersivePhotoUris.size
+                                immersivePhotoIndex = nextIndex
+                            },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowRight,
+                                contentDescription = "بعدی",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+
+                    // Top indicator overlay: e.g. "۱ از ۳"
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 20.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "${activeIndex + 1} از ${immersivePhotoUris.size}",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -2567,14 +2961,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                             errorMessage = "لطفا ابتدا کد پشتیبان را وارد کنید یا فایل انتخاب نمایید."
                             return@Button
                         }
-                        viewModel.importBackupFromJson(restoreText) { success, msg ->
-                            if (success) {
-                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                                showRestoreDialog = false
-                            } else {
-                                errorMessage = msg
-                            }
-                        }
+                        onRestoreBackupText(restoreText)
                     }
                 ) {
                     Text("بازگردانی متن پشتیبان", color = Color.White)
@@ -2582,6 +2969,87 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
             },
             dismissButton = {
                 TextButton(onClick = { showRestoreDialog = false }) {
+                    Text("انصراف", color = accentColor)
+                }
+            },
+            containerColor = Color.White
+        )
+    }
+
+    if (showSelectGroupRestoreDialog && restoreJsonPending != null) {
+        AlertDialog(
+            onDismissRequest = { 
+                showSelectGroupRestoreDialog = false 
+                restoreJsonPending = null
+            },
+            title = { Text("انتخاب گروه فامیلی هدف", fontWeight = FontWeight.Bold, color = textColor) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "اطلاعات بازیابی شده به کدام گروه فامیلی اضافه شوند؟",
+                        fontSize = 13.sp,
+                        color = textColor.copy(alpha = 0.8f)
+                    )
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 250.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(allGroups) { group ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.importBackupFromJson(restoreJsonPending!!, group.id) { success, msg ->
+                                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                            if (success) {
+                                                showRestoreDialog = false
+                                            }
+                                        }
+                                        showSelectGroupRestoreDialog = false
+                                        restoreJsonPending = null
+                                    },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Group,
+                                        contentDescription = null,
+                                        tint = accentColor,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(group.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = textColor)
+                                        if (!group.description.isNullOrBlank()) {
+                                            Text(
+                                                group.description,
+                                                fontSize = 11.sp,
+                                                color = textColor.copy(alpha = 0.6f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = { 
+                        showSelectGroupRestoreDialog = false 
+                        restoreJsonPending = null
+                    }
+                ) {
                     Text("انصراف", color = accentColor)
                 }
             },
@@ -2714,11 +3182,15 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                     Button(
                         colors = ButtonDefaults.buttonColors(containerColor = accentColor),
                         onClick = {
-                            try {
-                                isRestoringSubtree = true
-                                importFileLauncher.launch("*/*")
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "خطا در اجرای انتخاب‌گر فایل: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                            if (selectedGroupId == null) {
+                                Toast.makeText(context, "جهت بازیابی بکاپ عضو، ابتدا باید یک گروه فامیلی ساخته و انتخاب کرده باشید.", Toast.LENGTH_LONG).show()
+                            } else {
+                                try {
+                                    isRestoringSubtree = true
+                                    importFileLauncher.launch("*/*")
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "خطا در اجرای انتخاب‌گر فایل: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -2767,6 +3239,10 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                 Button(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
                     onClick = {
+                        if (selectedGroupId == null) {
+                            Toast.makeText(context, "جهت بازیابی بکاپ عضو، ابتدا باید یک گروه فامیلی ساخته و انتخاب کرده باشید.", Toast.LENGTH_LONG).show()
+                            return@Button
+                        }
                         if (restoreText.trim().isEmpty()) {
                             errorMessage = "لطفا ابتدا کد پشتیبان را وارد کنید یا فایل انتخاب نمایید."
                             return@Button
@@ -2774,6 +3250,9 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                         viewModel.importSubtreeBackupFromJson(restoreText) { success, msg, newGroupId ->
                             if (success) {
                                 Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                if (newGroupId != null) {
+                                    viewModel.setSelectedGroupId(newGroupId)
+                                }
                                 showSubtreeRestoreDialog = false
                             } else {
                                 errorMessage = msg
@@ -3268,7 +3747,11 @@ fun FamilyMemberNodeCard(
                 modifier
             }
         }
-        .clickable(onClick = onClick)
+        .pointerInput(person.id) {
+            detectTapGestures(
+                onTap = { onClick() }
+            )
+        }
         .testTag("member_node_${person.id}")
 
     Card(
@@ -3344,13 +3827,17 @@ fun FamilyMemberNodeCard(
                         .background(
                             if (person.gender == "Male") Color(0xFFE3F2FD) else Color(0xFFFCE4EC)
                         )
-                        .border(1.5.dp, if (!person.photoUri.isNullOrBlank()) accentColor else Color.Transparent, CircleShape)
-                        .clickable { onPhotoClick(person) },
+                        .border(1.5.dp, if (person.photoUris.isNotEmpty()) accentColor else Color.Transparent, CircleShape)
+                        .pointerInput(person.id) {
+                            detectTapGestures(
+                                onTap = { onPhotoClick(person) }
+                            )
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (!person.photoUri.isNullOrBlank()) {
+                    if (person.photoUris.isNotEmpty()) {
                         Image(
-                            painter = rememberAsyncImagePainter(model = person.photoUri),
+                            painter = rememberAsyncImagePainter(model = person.photoUris.firstOrNull()),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
@@ -5823,13 +6310,13 @@ fun MemberDetailsDialog(
                             .size(36.dp)
                             .clip(CircleShape)
                             .background(if (person.gender == "Male") Color(0xFFBBDEFB) else Color(0xFFF8BBD0))
-                            .border(1.dp, if (!person.photoUri.isNullOrBlank()) accentColor else Color.Transparent, CircleShape)
+                            .border(1.dp, if (person.photoUris.isNotEmpty()) accentColor else Color.Transparent, CircleShape)
                             .clickable { onPhotoClick(person) },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (!person.photoUri.isNullOrBlank()) {
+                        if (person.photoUris.isNotEmpty()) {
                             Image(
-                                painter = rememberAsyncImagePainter(model = person.photoUri),
+                                painter = rememberAsyncImagePainter(model = person.photoUris.firstOrNull()),
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
@@ -5945,14 +6432,6 @@ fun MemberDetailsDialog(
                                 onBackupSubtree(person)
                             },
                             leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = dialogAccentOrange) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("بازگردانی پشتیبان به عنوان گروه جدید", color = textColor) },
-                            onClick = {
-                                showActionMenu = false
-                                onRestoreSubtree()
-                            },
-                            leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null, tint = dialogAccentOrange) }
                         )
                         Divider(modifier = Modifier.padding(vertical = 4.dp))
                         DropdownMenuItem(

@@ -29,7 +29,8 @@ data class Person(
 data class FamilyGroup(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
-    val description: String? = null
+    val description: String? = null,
+    val displayOrder: Int = 0
 ) : Serializable
 
 @Entity(tableName = "relationships")

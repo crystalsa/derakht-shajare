@@ -33,7 +33,7 @@ interface FamilyDao {
     suspend fun deleteRelationshipsForPerson(personId: Long)
 
     // Group methods
-    @Query("SELECT * FROM family_groups ORDER BY name ASC")
+    @Query("SELECT * FROM family_groups ORDER BY displayOrder ASC, id ASC")
     fun getAllGroups(): Flow<List<FamilyGroup>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

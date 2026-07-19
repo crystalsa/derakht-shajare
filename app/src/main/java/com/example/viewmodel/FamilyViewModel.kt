@@ -37,11 +37,13 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     private val _selectedGroupId = MutableStateFlow<Long?>(null)
     val selectedGroupId = _selectedGroupId.asStateFlow()
 
+    private val prefs = application.getSharedPreferences("family_tree_prefs", android.content.Context.MODE_PRIVATE)
+
     // Tree configurations
-    private val _treeLayout = MutableStateFlow("Vertical") // "Vertical", "Horizontal"
+    private val _treeLayout = MutableStateFlow(prefs.getString("tree_layout", "Vertical") ?: "Vertical") // "Vertical", "Horizontal"
     val treeLayout = _treeLayout.asStateFlow()
 
-    private val _treeTheme = MutableStateFlow("Bento Grid") // "Bento Grid", "Classic", "Vintage Paper", "Dark Gold"
+    private val _treeTheme = MutableStateFlow(prefs.getString("tree_theme", "Bento Grid") ?: "Bento Grid") // "Bento Grid", "Classic", "Vintage Paper", "Dark Gold"
     val treeTheme = _treeTheme.asStateFlow()
 
     private val _focusPersonId = MutableStateFlow<Long?>(null) // For "Focus Mode" on a specific family line
@@ -223,8 +225,18 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
 
     fun addGroup(group: com.example.data.FamilyGroup, onComplete: (Long) -> Unit = {}) {
         viewModelScope.launch {
-            val id = repository.insertGroup(group)
+            val maxOrder = allGroups.value.map { it.displayOrder }.maxOrNull() ?: 0
+            val groupWithOrder = group.copy(displayOrder = maxOrder + 1)
+            val id = repository.insertGroup(groupWithOrder)
             onComplete(id)
+        }
+    }
+
+    fun updateGroupOrder(orderedGroups: List<com.example.data.FamilyGroup>) {
+        viewModelScope.launch {
+            orderedGroups.forEachIndexed { index, group ->
+                repository.updateGroup(group.copy(displayOrder = index))
+            }
         }
     }
 
@@ -480,8 +492,14 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         _filterResidence.value = residence
     }
     fun setFilterIsDeceased(deceased: Boolean?) { _filterIsDeceased.value = deceased }
-    fun setTreeLayout(layout: String) { _treeLayout.value = layout }
-    fun setTreeTheme(theme: String) { _treeTheme.value = theme }
+    fun setTreeLayout(layout: String) { 
+        _treeLayout.value = layout 
+        prefs.edit().putString("tree_layout", layout).apply()
+    }
+    fun setTreeTheme(theme: String) { 
+        _treeTheme.value = theme 
+        prefs.edit().putString("tree_theme", theme).apply()
+    }
     fun setFocusPersonId(id: Long?) { _focusPersonId.value = id }
     
     fun setHighlightPerson1(id: Long?) { _highlightPerson1Id.value = id }
@@ -693,8 +711,50 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         return (diff / (24 * 60 * 60 * 1000)).toInt()
     }
 
+    private fun getBase64Image(filePath: String): String? {
+        return try {
+            val file = java.io.File(filePath)
+            if (file.exists()) {
+                val bytes = file.readBytes()
+                android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun saveBase64Image(base64Str: String): String? {
+        return try {
+            val bytes = android.util.Base64.decode(base64Str, android.util.Base64.NO_WRAP)
+            val directory = java.io.File(getApplication<Application>().filesDir, "photos")
+            if (!directory.exists()) {
+                directory.mkdirs()
+            }
+            val file = java.io.File(directory, "person_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}.jpg")
+            java.io.FileOutputStream(file).use { fos ->
+                fos.write(bytes)
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     fun exportBackupToJson(groupId: Long? = null): String {
         val backupObj = org.json.JSONObject()
+        
+        // Settings
+        if (groupId == null) {
+            val settingsObj = org.json.JSONObject().apply {
+                put("treeLayout", treeLayout.value)
+                put("treeTheme", treeTheme.value)
+            }
+            backupObj.put("settings", settingsObj)
+        }
         
         // Groups
         val groupsArr = org.json.JSONArray()
@@ -738,6 +798,17 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 put("photoUri", p.photoUri ?: org.json.JSONObject.NULL)
                 put("generation", p.generation)
                 put("groupId", p.groupId ?: org.json.JSONObject.NULL)
+                
+                // Backup photos
+                val photosBase64Arr = org.json.JSONArray()
+                val urisList = p.photoUri?.split('|')?.filter { it.isNotBlank() } ?: emptyList()
+                for (uri in urisList) {
+                    val b64 = getBase64Image(uri)
+                    if (b64 != null) {
+                        photosBase64Arr.put(b64)
+                    }
+                }
+                put("photosBase64", photosBase64Arr)
             }
             personsArr.put(pObj)
         }
@@ -764,7 +835,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         return backupObj.toString(4)
     }
 
-    fun importBackupFromJson(jsonString: String, onComplete: (Boolean, String) -> Unit) {
+    fun importBackupFromJson(jsonString: String, targetGroupId: Long? = null, onComplete: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             try {
                 val backupObj = org.json.JSONObject(jsonString)
@@ -778,20 +849,36 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 val relsArr = backupObj.getJSONArray("relationships")
                 val groupsArr = if (backupObj.has("groups")) backupObj.getJSONArray("groups") else org.json.JSONArray()
                 
+                // Restore Settings
+                if (backupObj.has("settings")) {
+                    val settingsObj = backupObj.getJSONObject("settings")
+                    if (settingsObj.has("treeLayout")) {
+                        val layout = settingsObj.getString("treeLayout")
+                        setTreeLayout(layout)
+                    }
+                    if (settingsObj.has("treeTheme")) {
+                        val theme = settingsObj.getString("treeTheme")
+                        setTreeTheme(theme)
+                    }
+                }
+                
                 // We do NOT clear the data, so we can merge existing and backup information safely!
+                val oldToNewGroupIdMap = mutableMapOf<Long, Long>()
+                val oldToNewPersonIdMap = mutableMapOf<Long, Long>()
                 
                 for (i in 0 until groupsArr.length()) {
                     val gObj = groupsArr.getJSONObject(i)
-                    val id = gObj.getLong("id")
+                    val oldId = gObj.getLong("id")
                     val name = gObj.getString("name")
                     val description = if (gObj.isNull("description")) null else gObj.getString("description")
                     
-                    repository.insertGroup(com.example.data.FamilyGroup(id = id, name = name, description = description))
+                    val newId = repository.insertGroup(com.example.data.FamilyGroup(id = 0, name = name, description = description))
+                    oldToNewGroupIdMap[oldId] = newId
                 }
                 
                 for (i in 0 until personsArr.length()) {
                     val pObj = personsArr.getJSONObject(i)
-                    val id = pObj.getLong("id")
+                    val oldId = pObj.getLong("id")
                     val firstName = pObj.getString("firstName")
                     val lastName = pObj.getString("lastName")
                     val gender = pObj.getString("gender")
@@ -802,13 +889,41 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     val isDeceased = pObj.getBoolean("isDeceased")
                     val occupation = if (pObj.isNull("occupation")) null else pObj.getString("occupation")
                     val biography = if (pObj.isNull("biography")) null else pObj.getString("biography")
-                    val photoUri = if (pObj.isNull("photoUri")) null else pObj.getString("photoUri")
+                    val originalPhotoUri = if (pObj.isNull("photoUri")) null else pObj.getString("photoUri")
                     val generation = pObj.getInt("generation")
-                    val groupId = if (pObj.isNull("groupId")) null else pObj.getLong("groupId")
                     
-                    repository.insertPerson(
+                    val oldGroupId = if (pObj.isNull("groupId")) null else pObj.getLong("groupId")
+                    val newGroupId = if (targetGroupId != null) {
+                        targetGroupId
+                    } else if (oldGroupId != null) {
+                        oldToNewGroupIdMap[oldGroupId]
+                    } else {
+                        null
+                    }
+                    
+                    // Restore photos from Base64
+                    var restoredPhotoUri: String? = null
+                    if (pObj.has("photosBase64")) {
+                        val photosBase64Arr = pObj.getJSONArray("photosBase64")
+                        val restoredPaths = mutableListOf<String>()
+                        for (j in 0 until photosBase64Arr.length()) {
+                            val b64 = photosBase64Arr.getString(j)
+                            val savedPath = saveBase64Image(b64)
+                            if (savedPath != null) {
+                                restoredPaths.add(savedPath)
+                            }
+                        }
+                        if (restoredPaths.isNotEmpty()) {
+                            restoredPhotoUri = restoredPaths.joinToString("|")
+                        }
+                    }
+                    if (restoredPhotoUri == null) {
+                        restoredPhotoUri = originalPhotoUri
+                    }
+                    
+                    val newPersonId = repository.insertPerson(
                         com.example.data.Person(
-                            id = id,
+                            id = 0,
                             firstName = firstName,
                             lastName = lastName,
                             gender = gender,
@@ -819,28 +934,40 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                             isDeceased = isDeceased,
                             occupation = occupation,
                             biography = biography,
-                            photoUri = photoUri,
+                            photoUri = restoredPhotoUri,
                             generation = generation,
-                            groupId = groupId
+                            groupId = newGroupId
                         )
                     )
+                    oldToNewPersonIdMap[oldId] = newPersonId
                 }
                 
                 for (i in 0 until relsArr.length()) {
                     val rObj = relsArr.getJSONObject(i)
-                    val id = rObj.getLong("id")
-                    val personId1 = rObj.getLong("personId1")
-                    val personId2 = rObj.getLong("personId2")
+                    val oldP1 = rObj.getLong("personId1")
+                    val oldP2 = rObj.getLong("personId2")
                     val type = rObj.getString("type")
                     
-                    repository.insertRelationship(
-                        com.example.data.Relationship(
-                            id = id,
-                            personId1 = personId1,
-                            personId2 = personId2,
-                            type = type
+                    val newP1 = oldToNewPersonIdMap[oldP1]
+                    val newP2 = oldToNewPersonIdMap[oldP2]
+                    
+                    if (newP1 != null && newP2 != null) {
+                        repository.insertRelationship(
+                            com.example.data.Relationship(
+                                id = 0,
+                                personId1 = newP1,
+                                personId2 = newP2,
+                                type = type
+                            )
                         )
-                    )
+                    }
+                }
+                
+                if (targetGroupId != null) {
+                    setSelectedGroupId(targetGroupId)
+                } else if (oldToNewGroupIdMap.isNotEmpty()) {
+                    val firstNewGroup = oldToNewGroupIdMap.values.first()
+                    setSelectedGroupId(firstNewGroup)
                 }
                 
                 onComplete(true, "بازگردانی و ادغام فایل پشتیبان با موفقیت انجام شد.")
@@ -920,6 +1047,17 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 put("photoUri", p.photoUri ?: org.json.JSONObject.NULL)
                 put("generation", p.generation)
                 put("groupId", p.groupId ?: org.json.JSONObject.NULL)
+                
+                // Backup photos Base64
+                val photosBase64Arr = org.json.JSONArray()
+                val urisList = p.photoUri?.split('|')?.filter { it.isNotBlank() } ?: emptyList()
+                for (uri in urisList) {
+                    val b64 = getBase64Image(uri)
+                    if (b64 != null) {
+                        photosBase64Arr.put(b64)
+                    }
+                }
+                put("photosBase64", photosBase64Arr)
             }
             personsArr.put(pObj)
         }
@@ -972,7 +1110,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
                 if (minGen == Int.MAX_VALUE) minGen = 0
-
+ 
                 for (i in 0 until personsArr.length()) {
                     val pObj = personsArr.getJSONObject(i)
                     val oldId = pObj.getLong("id")
@@ -986,12 +1124,32 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     val isDeceased = pObj.getBoolean("isDeceased")
                     val occupation = if (pObj.isNull("occupation")) null else pObj.getString("occupation")
                     val biography = if (pObj.isNull("biography")) null else pObj.getString("biography")
-                    val photoUri = if (pObj.isNull("photoUri")) null else pObj.getString("photoUri")
+                    val originalPhotoUri = if (pObj.isNull("photoUri")) null else pObj.getString("photoUri")
                     val generation = pObj.getInt("generation")
                     
                     // Normalize generation
                     val normalizedGen = (generation - minGen).coerceAtLeast(0)
-
+                    
+                    // Restore photos from Base64
+                    var restoredPhotoUri: String? = null
+                    if (pObj.has("photosBase64")) {
+                        val photosBase64Arr = pObj.getJSONArray("photosBase64")
+                        val restoredPaths = mutableListOf<String>()
+                        for (j in 0 until photosBase64Arr.length()) {
+                            val b64 = photosBase64Arr.getString(j)
+                            val savedPath = saveBase64Image(b64)
+                            if (savedPath != null) {
+                                restoredPaths.add(savedPath)
+                            }
+                        }
+                        if (restoredPaths.isNotEmpty()) {
+                            restoredPhotoUri = restoredPaths.joinToString("|")
+                        }
+                    }
+                    if (restoredPhotoUri == null) {
+                        restoredPhotoUri = originalPhotoUri
+                    }
+ 
                     val newPersonId = repository.insertPerson(
                         com.example.data.Person(
                             id = 0, // Let Room auto-generate a new ID
@@ -1005,7 +1163,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                             isDeceased = isDeceased,
                             occupation = occupation,
                             biography = biography,
-                            photoUri = photoUri,
+                            photoUri = restoredPhotoUri,
                             generation = normalizedGen,
                             groupId = newGroupId
                         )
