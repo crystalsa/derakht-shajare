@@ -186,6 +186,8 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     val focusPersonId by viewModel.focusPersonId.collectAsStateWithLifecycle()
     val stats by viewModel.statsState.collectAsStateWithLifecycle()
     val upcomingEvents by viewModel.upcomingEvents.collectAsStateWithLifecycle()
+    
+    var expandedGhostParents by remember { mutableStateOf(setOf<Long>()) }
 
     val highlightP1Id by viewModel.highlightPerson1Id.collectAsStateWithLifecycle()
     val highlightP2Id by viewModel.highlightPerson2Id.collectAsStateWithLifecycle()
@@ -1072,6 +1074,9 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                                                     viewModel.setFocusPersonId(person.id)
                                                 }
                                             },
+                                            onPanToPerson = { person ->
+                                                viewModel.setGlowPersonId(person.id)
+                                            },
                                             onAddFirstPerson = onAddPersonTrigger,
                                             onPhotoClick = { person ->
                                                 if (person.photoUris.isNotEmpty()) {
@@ -1124,6 +1129,9 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                                     } else {
                                         viewModel.setFocusPersonId(person.id)
                                     }
+                                },
+                                onPanToPerson = { person ->
+                                    viewModel.setGlowPersonId(person.id)
                                 },
                                 onAddFirstPerson = onAddPersonTrigger,
                                 onPhotoClick = { person ->
@@ -1637,6 +1645,9 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                             viewModel.setFocusPersonId(person.id)
                         }
                     },
+                    onPanToPerson = { person ->
+                        viewModel.setGlowPersonId(person.id)
+                    },
                     onAddFirstPerson = onAddPersonTrigger,
                     onPhotoClick = { person ->
                         if (person.photoUris.isNotEmpty()) {
@@ -1673,6 +1684,34 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
+                    }
+                }
+                
+                // Exit Focus Mode Button (Floating at bottom-start)
+                if (focusPersonId != null) {
+                    FloatingActionButton(
+                        onClick = { viewModel.setFocusPersonId(null) },
+                        containerColor = Color(0xFFFF9800),
+                        contentColor = Color.White,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(24.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VisibilityOff,
+                                contentDescription = "خروج از نمای متمرکز"
+                            )
+                            Text(
+                                text = "خروج از نمای متمرکز",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
             }
@@ -2422,6 +2461,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
         AddSpouseDialog(
             spouseOf = spouseOf,
             groups = allGroups,
+            allPersons = persons,
             textColor = textColor,
             accentColor = accentColor,
             onDismiss = { personToAddSpouseFor = null },
@@ -2445,6 +2485,11 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                 ) { newId: Long ->
                     Toast.makeText(context, "همسر با موفقیت برای ${spouseOf.fullName} اضافه شد", Toast.LENGTH_SHORT).show()
                 }
+                personToAddSpouseFor = null
+            },
+            onConfirmExisting = { existingSpouseId, relationshipType ->
+                viewModel.linkExistingSpouse(spouseOf.id, existingSpouseId, relationshipType)
+                Toast.makeText(context, "ازدواج فامیلی با موفقیت ثبت شد", Toast.LENGTH_SHORT).show()
                 personToAddSpouseFor = null
             }
         )
@@ -3294,9 +3339,12 @@ fun InteractiveFamilyTree(
     onPersonClick: (Person) -> Unit,
     onPersonDoubleTap: (Person) -> Unit,
     onViewFamilyClick: (Person) -> Unit,
+    onPanToPerson: (Person) -> Unit = {},
     onAddFirstPerson: () -> Unit,
     onPhotoClick: (Person) -> Unit = {},
-    glowPersonId: Long? = null
+    glowPersonId: Long? = null,
+    expandedGhostParents: Set<Long> = emptySet(),
+    onToggleGhostChildren: (Long) -> Unit = {}
 ) {
     if (persons.isEmpty()) {
         androidx.compose.foundation.layout.BoxWithConstraints(
@@ -3392,13 +3440,13 @@ fun InteractiveFamilyTree(
     val density = LocalDensity.current.density
 
     // Generational Layout positioning calculations
-    val positions = remember(persons, relationships, layoutType, focusPersonId) {
-        computeTreeLayoutPositions(persons, relationships, layoutType, focusPersonId)
+    val positions = remember(persons, relationships, layoutType, focusPersonId, expandedGhostParents) {
+        computeTreeLayoutPositions(persons, relationships, layoutType, focusPersonId, expandedGhostParents)
     }
 
     LaunchedEffect(glowPersonId, positions) {
         if (glowPersonId != null) {
-            val pos = positions[glowPersonId]
+            val pos = positions[glowPersonId.toString()]
             if (pos != null) {
                 val targetXPx = pos.x * density
                 val targetYPx = pos.y * density
@@ -3467,18 +3515,22 @@ fun InteractiveFamilyTree(
         }
         
         val heartColors = listOf(
-            Color(0xFFE91E63), // Pink
-            Color(0xFFFF2D55), // Red-pink
-            Color(0xFFFF3B30), // System Red
-            Color(0xFF9C27B0), // Purple
-            Color(0xFFFF9500), // Orange
-            Color(0xFFE040FB), // Magenta
-            Color(0xFF007AFF), // Blue
-            Color(0xFF4CD964)  // Green
-        )
+            0xFFE91E63, 0xFF3F51B5, 0xFF4CAF50, 0xFFFF9800, 0xFF9C27B0, 0xFF00BCD4, 0xFFFFEB3B, 0xFF795548,
+            0xFFF44336, 0xFF2196F3, 0xFF8BC34A, 0xFFFF5722, 0xFF673AB7, 0xFF009688, 0xFFFFC107, 0xFF607D8B,
+            0xFFE040FB, 0xFF03A9F4, 0xFFCDDC39, 0xFFFF7043, 0xFF512DA8, 0xFF00796B, 0xFFFBC02D, 0xFF5D4037,
+            0xFFC2185B, 0xFF1976D2, 0xFF689F38, 0xFFE64A19, 0xFF7B1FA2, 0xFF0097A7, 0xFFF57C00, 0xFF455A64,
+            0xFFD81B60, 0xFF0288D1, 0xFF9CCC65, 0xFFF4511E, 0xFF303F9F, 0xFF26A69A, 0xFFFFCA28, 0xFF8D6E63,
+            0xFFAD1457, 0xFF1565C0, 0xFF558B2F, 0xFFD84315, 0xFF4527A0, 0xFF00838F, 0xFFF39C12, 0xFF37474F,
+            0xFFEC407A, 0xFF29B6F6, 0xFF7CB342, 0xFFFF8A65, 0xFF5E35B1, 0xFF26C6DA, 0xFFFFD54F, 0xFF6D4C41,
+            0xFF880E4F, 0xFF0D47A1, 0xFF33691E, 0xFFBF360C, 0xFF311B92, 0xFF006064, 0xFFE67E22, 0xFF263238
+        ).map { Color(it) }
+        
+        // Shuffle based on a fixed seed so it's consistent across recompositions but random-looking
+        val random = kotlin.random.Random(42)
+        val shuffledColors = heartColors.shuffled(random)
         
         spousePairs.forEachIndexed { index, pair ->
-            val color = heartColors[index % heartColors.size]
+            val color = shuffledColors[index % shuffledColors.size]
             map[pair.first] = color
             map[pair.second] = color
         }
@@ -3525,9 +3577,36 @@ fun InteractiveFamilyTree(
             ) {
                 // Draw lines between spouses and child relations
                 for (rel in relationships) {
-                    val pos1 = positions[rel.personId1]
-                    val pos2 = positions[rel.personId2]
-                    if (pos1 != null && pos2 != null) {
+                    val isSpouse = isSpouseRelation(rel.type)
+                    
+                    val pairsToDraw = mutableListOf<Pair<String, String>>()
+                    if (isSpouse) {
+                        val p1 = rel.personId1.toString()
+                        val p2 = rel.personId2.toString()
+                        val s1 = "shadow_${rel.personId1}_${rel.personId2}"
+                        val s2 = "shadow_${rel.personId2}_${rel.personId1}"
+                        
+                        var drawn = false
+                        if (positions.containsKey(p1) && positions.containsKey(s2)) {
+                            pairsToDraw.add(p1 to s2)
+                            drawn = true
+                        }
+                        if (positions.containsKey(p2) && positions.containsKey(s1)) {
+                            pairsToDraw.add(p2 to s1)
+                            drawn = true
+                        }
+                        if (!drawn && positions.containsKey(p1) && positions.containsKey(p2)) {
+                            pairsToDraw.add(p1 to p2)
+                        }
+                    } else {
+                        pairsToDraw.add(rel.personId1.toString() to rel.personId2.toString())
+                        
+                    }
+
+                    for ((pos1Str, pos2Str) in pairsToDraw) {
+                        val pos1 = positions[pos1Str]
+                        val pos2 = positions[pos2Str]
+                        if (pos1 != null && pos2 != null) {
                         val p1Offset = Offset(
                             x = pos1.x * density + size.width / 2,
                             y = pos1.y * density + size.height / 2
@@ -3602,7 +3681,15 @@ fun InteractiveFamilyTree(
                                         val p2 = parents[1]
                                         val minId = minOf(p1, p2)
                                         val maxId = maxOf(p1, p2)
-                                        isSpouseMap.contains("$minId-$maxId") && positions.containsKey(p1) && positions.containsKey(p2)
+                                        val isConsanguineous = positions.containsKey("shadow_${p1}_${p2}") || positions.containsKey("shadow_${p2}_${p1}")
+                                        
+                                        if (isConsanguineous) {
+                                            true
+                                        } else {
+                                            val p1Str = p1.toString()
+                                            val p2Str = p2.toString()
+                                            isSpouseMap.contains("$minId-$maxId") && positions.containsKey(p1Str) && positions.containsKey(p2Str)
+                                        }
                                     } else {
                                         false
                                     }
@@ -3611,8 +3698,26 @@ fun InteractiveFamilyTree(
                                         val p1 = parents[0]
                                         val p2 = parents[1]
                                         if (parentId == minOf(p1, p2)) {
-                                            val posParent1 = positions[p1]
-                                            val posParent2 = positions[p2]
+                                            var p1Key = p1.toString()
+                                            var p2Key = p2.toString()
+                                            
+                                            val p1Person = persons.find { it.id == p1 }
+                                            val p2Person = persons.find { it.id == p2 }
+                                            
+                                            if (p1Person?.gender == "Female" && p2Person?.gender == "Male" && positions.containsKey("shadow_${p1}_${p2}")) {
+                                                p1Key = "shadow_${p1}_${p2}"
+                                            } else if (p1Person?.gender == "Male" && p2Person?.gender == "Female" && positions.containsKey("shadow_${p2}_${p1}")) {
+                                                p2Key = "shadow_${p2}_${p1}"
+                                            } else {
+                                                if (positions.containsKey("shadow_${p1}_${p2}")) {
+                                                    p1Key = "shadow_${p1}_${p2}"
+                                                } else if (positions.containsKey("shadow_${p2}_${p1}")) {
+                                                    p2Key = "shadow_${p2}_${p1}"
+                                                }
+                                            }
+                                            
+                                            val posParent1 = positions[p1Key]
+                                            val posParent2 = positions[p2Key]
                                             if (posParent1 != null && posParent2 != null) {
                                                 val parent1Offset = Offset(
                                                     x = posParent1.x * density + size.width / 2,
@@ -3648,43 +3753,50 @@ fun InteractiveFamilyTree(
                             }
                         }
                     }
+                    }
                 }
             }
 
             // Render card nodes above lines
-            persons.forEach { person ->
-                val pos = positions[person.id]
-                if (pos != null) {
-                    val cardXPx = pos.x * density
-                    val cardYPx = pos.y * density
+            positions.forEach { (key, pos) ->
+                val isShadow = key.startsWith("shadow_")
+                
+                val personId = if (isShadow) {
+                    key.split("_")[1].toLong()
+                } else {
+                    key.toLong()
+                }
+                val person = persons.find { it.id == personId } ?: return@forEach
 
-                    Box(
-                        modifier = Modifier
-                            .absoluteOffset { IntOffset(cardXPx.roundToInt(), cardYPx.roundToInt()) }
-                            .padding(8.dp)
-                            .align(Alignment.Center)
-                    ) {
-                        val isPathHighlighted = highlightedPathIds.contains(person.id)
-                        val isSecondSpouse = remember(person.id, relationships) {
-                            relationships.any { rel ->
-                                isSecondSpouseRelation(rel.type) && rel.personId2 == person.id
-                            }
+                val cardXPx = pos.x * density
+                val cardYPx = pos.y * density
+
+                Box(
+                    modifier = Modifier
+                        .absoluteOffset { IntOffset(cardXPx.roundToInt(), cardYPx.roundToInt()) }
+                        .padding(8.dp)
+                        .align(Alignment.Center)
+                ) {
+                    val isPathHighlighted = highlightedPathIds.contains(person.id)
+                    
+                    FamilyMemberNodeCard(
+                        person = person,
+                        isHighlighted = isPathHighlighted,
+                        accentColor = accentColor,
+                        cardBgColor = cardBgColor,
+                        textColor = textColor,
+                        spouseHeartColor = spouseMapForHeart[person.id],
+                        isShadow = isShadow,
+                        onFocusClick = { onViewFamilyClick(person) },
+                        onClick = { onPersonClick(person) },
+                        onDoubleTap = { onPersonDoubleTap(person) },
+                        onPhotoClick = onPhotoClick,
+                        glowPersonId = if (isShadow) null else glowPersonId,
+                        onEyeClick = {
+                            // On eye click (link icon on shadow card), we pan the view to the main card of this person
+                            onPanToPerson(person)
                         }
-                        FamilyMemberNodeCard(
-                            person = person,
-                            isHighlighted = isPathHighlighted,
-                            accentColor = accentColor,
-                            cardBgColor = cardBgColor,
-                            textColor = textColor,
-                            spouseHeartColor = spouseMapForHeart[person.id],
-                            isSecondSpouse = isSecondSpouse,
-                            onFocusClick = { onViewFamilyClick(person) },
-                            onClick = { onPersonClick(person) },
-                            onDoubleTap = { onPersonDoubleTap(person) },
-                            onPhotoClick = onPhotoClick,
-                            glowPersonId = glowPersonId
-                        )
-                    }
+                    )
                 }
             }
         }
@@ -3724,19 +3836,21 @@ fun FamilyMemberNodeCard(
     cardBgColor: Color,
     textColor: Color,
     spouseHeartColor: Color? = null,
-    isSecondSpouse: Boolean = false,
+    isShadow: Boolean = false,
     onFocusClick: (() -> Unit)? = null,
     onClick: () -> Unit,
     onDoubleTap: () -> Unit,
     onPhotoClick: (Person) -> Unit = {},
-    glowPersonId: Long? = null
+    glowPersonId: Long? = null,
+    onEyeClick: () -> Unit = {}
 ) {
     val isGlow = person.id == glowPersonId
     val borderStroke = if (isHighlighted) {
-        // High-contrast Orange and White gradient border for selection/highlight
         BorderStroke(3.dp, Brush.linearGradient(listOf(Color(0xFFF57C00), Color.White, Color(0xFFF57C00))))
     } else if (isGlow) {
         BorderStroke(3.2.dp, accentColor)
+    } else if (isShadow) {
+        BorderStroke(1.5.dp, Color.Gray.copy(alpha = 0.5f))
     } else if (person.isDeceased) {
         BorderStroke(1.2.dp, Color.Gray.copy(alpha = 0.5f))
     } else {
@@ -3744,7 +3858,7 @@ fun FamilyMemberNodeCard(
     }
 
     val cardModifier = Modifier
-        .width(160.dp) // Slightly wider for better details fitting
+        .width(160.dp)
         .let { modifier ->
             if (isGlow) {
                 modifier.shadow(elevation = 16.dp, shape = RoundedCornerShape(16.dp))
@@ -3752,19 +3866,38 @@ fun FamilyMemberNodeCard(
                 modifier
             }
         }
+        .let { modifier ->
+            modifier
+        }
         .clickable { onClick() }
         .testTag("member_node_${person.id}")
 
     Card(
         modifier = cardModifier,
         colors = CardDefaults.cardColors(
-            containerColor = Color.White // Explicit pure white card background for maximum contrast
+            containerColor = if (isShadow) Color(0xFFF5F5F5) else Color.White
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isShadow) 1.dp else 5.dp),
         border = borderStroke,
         shape = RoundedCornerShape(16.dp)
     ) {
-        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))) {
+        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).let { 
+            if (isShadow) it.alpha(0.65f) else it 
+        }) {
+            // Shadow / reference indicator with Link Icon
+            if (isShadow) {
+                Icon(
+                    imageVector = Icons.Default.Link,
+                    contentDescription = "Shadow Link",
+                    tint = Color.Gray,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart) // Bottom left in LTR, Bottom right in RTL
+                        .padding(8.dp)
+                        .size(16.dp)
+                        .clickable { onEyeClick() }
+                )
+            }
+
             // Deceased overlay (Elegant Diagonal Black Ribbon in top-left corner, non-obtrusive)
             if (person.isDeceased) {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -3861,29 +3994,6 @@ fun FamilyMemberNodeCard(
                     textAlign = TextAlign.Center
                 )
 
-                if (isSecondSpouse) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Box(
-                        modifier = Modifier
-                            .background(Color(0xFFFFF9C4), RoundedCornerShape(4.dp))
-                            .border(0.5.dp, Color(0xFFFBC02D), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null,
-                                tint = Color(0xFFF57F17),
-                                modifier = Modifier.size(10.dp)
-                            )
-                            Text("همسر دوم", fontSize = 8.sp, color = Color(0xFFF57F17), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
@@ -3922,8 +4032,9 @@ fun computeTreeLayoutPositions(
     persons: List<Person>,
     relationships: List<Relationship>,
     layoutType: String,
-    focusPersonId: Long?
-): Map<Long, TreePos> {
+    focusPersonId: Long?,
+    expandedGhostParents: Set<Long> = emptySet()
+): Map<String, TreePos> {
     if (persons.isEmpty()) return emptyMap()
 
     val parentsMap = mutableMapOf<Long, MutableList<Long>>()
@@ -4016,6 +4127,13 @@ fun computeTreeLayoutPositions(
             }
         }
 
+        // 2.5 Add siblings (children of parents of focusPersonId) without traversing down
+        parentsMap[focusPersonId]?.forEach { parentId ->
+            childrenMap[parentId]?.forEach { siblingId ->
+                visitedSet.add(siblingId)
+            }
+        }
+
         // 3. Add spouses of everyone in the visited set
         val spousesToAdd = mutableSetOf<Long>()
         visitedSet.forEach { personId ->
@@ -4032,6 +4150,7 @@ fun computeTreeLayoutPositions(
 
     class SubtreeLayout(
         val positions: Map<Long, Float>,
+        val shadowPositions: Map<String, Float>,
         val minXAtLevel: Map<Int, Float>,
         val maxXAtLevel: Map<Int, Float>
     )
@@ -4042,39 +4161,91 @@ fun computeTreeLayoutPositions(
     fun layoutSubtree(personId: Long, level: Int): SubtreeLayout {
         // Find spouse group
         val spouses = (spousesMap[personId] ?: emptySet()).filter { visiblePersonSet.contains(it) }.sorted()
-        val spouseGroup = (listOf(personId) + spouses).filter { !visitedSubtrees.contains(it) }
+        
+        // A spouse should be a shadow if they are already visited, OR if they have parents in the tree
+        // that haven't been visited yet (meaning they will be drawn as a biological child later).
+        val shadowSpouses = spouses.filter { spouseId ->
+            visitedSubtrees.contains(spouseId) || 
+            (parentsMap[spouseId]?.any { visiblePersonSet.contains(it) && !visitedSubtrees.contains(it) } == true)
+        }
+        val newSpouses = spouses.filter { !shadowSpouses.contains(it) }
+        
+        val spouseGroup = listOf(personId) + newSpouses
+        val fullGroupForLayout = listOf(personId) + spouses // use all for layout
         
         spouseGroup.forEach { visitedSubtrees.add(it) }
         
-        val spouseSpacing = 220f
-        val siblingSpacing = 240f
-        val S = spouseGroup.size
+        val spouseSpacing = 180f
+        val siblingSpacing = 180f
+        val S = fullGroupForLayout.size
         
         // Initial positions of spouses centered at 0
         val localPositions = mutableMapOf<Long, Float>()
+        val shadowPositions = mutableMapOf<String, Float>()
         for (i in 0 until S) {
-            val memberId = spouseGroup[i]
-            localPositions[memberId] = i * spouseSpacing - (S - 1) * spouseSpacing / 2f
+            val memberId = fullGroupForLayout[i]
+            val x = i * spouseSpacing - (S - 1) * spouseSpacing / 2f
+            if (memberId in shadowSpouses) {
+                shadowPositions["shadow_${memberId}_$personId"] = x
+            } else {
+                localPositions[memberId] = x
+            }
         }
         
-        val children = spouseGroup.flatMap { childrenMap[it] ?: emptyList() }
-            .filter { visiblePersonSet.contains(it) && !visitedSubtrees.contains(it) }
+        val allChildren = spouseGroup.flatMap { childrenMap[it] ?: emptyList() }
+            .filter { visiblePersonSet.contains(it) }
             .distinct()
             .sorted()
+            
+        val mainChildren = mutableListOf<Long>()
+        
+        for (child in allChildren) {
+            val pParents = parentsMap[child] ?: emptyList()
+            var fatherId: Long? = null
+            var motherId: Long? = null
+            for (pId in pParents) {
+                val p = persons.find { it.id == pId }
+                if (p?.gender == "Male") fatherId = pId
+                if (p?.gender == "Female") motherId = pId
+            }
+            
+            val fatherInVisible = fatherId != null && visiblePersonSet.contains(fatherId)
+            val motherInVisible = motherId != null && visiblePersonSet.contains(motherId)
+            
+            val fatherInSpouseGroup = fatherId != null && spouseGroup.contains(fatherId)
+            val motherInSpouseGroup = motherId != null && spouseGroup.contains(motherId)
+            
+            val shouldDrawMain = if (fatherInVisible && motherInVisible) {
+                // If both are visible in the tree, ALWAYS attach to the father's group
+                fatherInSpouseGroup
+            } else {
+                // Otherwise attach to whichever is in the group
+                fatherInSpouseGroup || motherInSpouseGroup
+            }
+            
+            if (shouldDrawMain) {
+                if (!visitedSubtrees.contains(child)) {
+                    mainChildren.add(child)
+                }
+            }
+        }
+        
+        val children = mainChildren
 
         if (children.isEmpty()) {
             val levelMinX = mapOf(level to -(S - 1) * spouseSpacing / 2f)
             val levelMaxX = mapOf(level to (S - 1) * spouseSpacing / 2f)
-            return SubtreeLayout(localPositions, levelMinX, levelMaxX)
+            return SubtreeLayout(localPositions, shadowPositions, levelMinX, levelMaxX)
         }
 
         // Layout all children subtrees
         val childLayouts = children.map { childId ->
             layoutSubtree(childId, level + 1)
-        }
+        }.toMutableList()
 
         // Merge children subtrees from left to right, avoiding overlap at any level
         val mergedPositions = mutableMapOf<Long, Float>()
+        val mergedShadowPositions = mutableMapOf<String, Float>()
         val mergedMinX = mutableMapOf<Int, Float>()
         val mergedMaxX = mutableMapOf<Int, Float>()
 
@@ -4082,6 +4253,7 @@ fun computeTreeLayoutPositions(
             val childLayout = childLayouts[i]
             if (i == 0) {
                 mergedPositions.putAll(childLayout.positions)
+                mergedShadowPositions.putAll(childLayout.shadowPositions)
                 mergedMinX.putAll(childLayout.minXAtLevel)
                 mergedMaxX.putAll(childLayout.maxXAtLevel)
             } else {
@@ -4100,6 +4272,9 @@ fun computeTreeLayoutPositions(
                 // Apply shift and merge
                 childLayout.positions.forEach { (id, x) ->
                     mergedPositions[id] = x + minShift
+                }
+                childLayout.shadowPositions.forEach { (key, x) ->
+                    mergedShadowPositions[key] = x + minShift
                 }
                 childLayout.minXAtLevel.forEach { (lvl, x) ->
                     val newMin = x + minShift
@@ -4121,10 +4296,15 @@ fun computeTreeLayoutPositions(
         // We want childrenCenter to align with parent center (which is 0)
         val shiftAmount = -childrenCenter
         val finalPositions = mutableMapOf<Long, Float>()
+        val finalShadowPositions = mutableMapOf<String, Float>()
         finalPositions.putAll(localPositions) // parent spouses stay at their local positions
+        finalShadowPositions.putAll(shadowPositions)
 
         mergedPositions.forEach { (id, x) ->
             finalPositions[id] = x + shiftAmount
+        }
+        mergedShadowPositions.forEach { (key, x) ->
+            finalShadowPositions[key] = x + shiftAmount
         }
 
         // Compute final level bounds
@@ -4141,7 +4321,7 @@ fun computeTreeLayoutPositions(
             finalMaxX[lvl] = x + shiftAmount
         }
 
-        return SubtreeLayout(finalPositions, finalMinX, finalMaxX)
+        return SubtreeLayout(finalPositions, finalShadowPositions, finalMinX, finalMaxX)
     }
 
     val allSubtreeLayouts = mutableListOf<SubtreeLayout>()
@@ -4163,13 +4343,15 @@ fun computeTreeLayoutPositions(
 
     // Merge all independent subtrees side-by-side
     val finalPositions = mutableMapOf<Long, Float>()
+    val finalShadowPositions = mutableMapOf<String, Float>()
     val globalMaxX = mutableMapOf<Int, Float>()
-    val siblingSpacing = 240f
+    val siblingSpacing = 180f
 
     for (i in allSubtreeLayouts.indices) {
         val layout = allSubtreeLayouts[i]
         if (i == 0) {
             finalPositions.putAll(layout.positions)
+            finalShadowPositions.putAll(layout.shadowPositions)
             layout.maxXAtLevel.forEach { (lvl, x) ->
                 globalMaxX[lvl] = x
             }
@@ -4190,6 +4372,9 @@ fun computeTreeLayoutPositions(
             layout.positions.forEach { (id, x) ->
                 finalPositions[id] = x + minShift
             }
+            layout.shadowPositions.forEach { (key, x) ->
+                finalShadowPositions[key] = x + minShift
+            }
             layout.maxXAtLevel.forEach { (lvl, x) ->
                 val newMax = x + minShift
                 globalMaxX[lvl] = maxOf(globalMaxX[lvl] ?: newMax, newMax)
@@ -4197,8 +4382,8 @@ fun computeTreeLayoutPositions(
         }
     }
 
-    val positions = mutableMapOf<Long, TreePos>()
-    val vSpacing = 220f
+    val positions = mutableMapOf<String, TreePos>()
+    val vSpacing = 280f
 
     val radialAngles = mutableMapOf<Long, Float>()
     if (layoutType == "Circular") {
@@ -4279,7 +4464,7 @@ fun computeTreeLayoutPositions(
 
             when (layoutType) {
                 "Horizontal" -> {
-                    positions[id] = TreePos(
+                    positions[id.toString()] = TreePos(
                         x = level * vSpacing,
                         y = posX
                     )
@@ -4292,17 +4477,43 @@ fun computeTreeLayoutPositions(
                     } else {
                         level * 300f + 100f
                     }
-                    positions[id] = TreePos(
+                    positions[id.toString()] = TreePos(
                         x = radius * kotlin.math.cos(angle),
                         y = radius * kotlin.math.sin(angle)
                     )
                 }
                 else -> { // "Vertical"
-                    positions[id] = TreePos(
+                    positions[id.toString()] = TreePos(
                         x = posX,
                         y = level * vSpacing
                     )
                 }
+            }
+        }
+    }
+    
+    // Add shadow positions
+    finalShadowPositions.forEach { (key, posX) ->
+        val parts = key.split("_")
+        // For shadow spouse: shadow_12_34 -> parts[1]=12, parts[2]=34 (main spouse)
+        val personLevelId = parts[1].toLong()
+        val level = levels[personLevelId] ?: 0
+        when (layoutType) {
+            "Horizontal" -> {
+                positions[key] = TreePos(
+                    x = level * vSpacing,
+                    y = posX
+                )
+            }
+            "Circular" -> {
+                // Shadows aren't fully supported in circular layout yet, fallback to center
+                positions[key] = TreePos(0f, 0f)
+            }
+            else -> { // "Vertical"
+                positions[key] = TreePos(
+                    x = posX,
+                    y = level * vSpacing
+                )
             }
         }
     }
@@ -5604,11 +5815,14 @@ fun EditPersonDialog(
 fun AddSpouseDialog(
     spouseOf: Person,
     groups: List<com.example.data.FamilyGroup>,
+    allPersons: List<Person>,
     textColor: Color,
     accentColor: Color,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, String?, String?, String?, String?, Boolean, String?, String?, Long?, String) -> Unit
+    onConfirm: (String, String, String, String?, String?, String?, String?, Boolean, String?, String?, Long?, String) -> Unit,
+    onConfirmExisting: (Long, String) -> Unit
 ) {
+    var selectedTab by remember { mutableStateOf(0) }
     val defaultGender = if (spouseOf.gender == "Male") "Female" else "Male"
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf(spouseOf.lastName) }
@@ -5625,6 +5839,9 @@ fun AddSpouseDialog(
     var selectedGroupIdForPerson by remember { mutableStateOf<Long?>(spouseOf.groupId) }
     var isSecondSpouse by remember { mutableStateOf(false) }
     var isDivorced by remember { mutableStateOf(false) }
+    
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedExistingPerson by remember { mutableStateOf<Person?>(null) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         AlertDialog(
@@ -5633,215 +5850,208 @@ fun AddSpouseDialog(
             modifier = Modifier.border(2.dp, accentColor, RoundedCornerShape(24.dp)),
             containerColor = Color.White,
             shape = RoundedCornerShape(24.dp),
-            title = { Text("ثبت و افزودن همسر برای ${spouseOf.fullName}", fontWeight = FontWeight.Bold, color = textColor) },
-        text = {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                item {
-                    AppTextField(
-                        value = firstName,
-                        onValueChange = { firstName = it },
-                        label = "نام"
-                    )
-                }
-                item {
-                    AppTextField(
-                        value = lastName,
-                        onValueChange = { lastName = it },
-                        label = "نام خانوادگی"
-                    )
-                }
-                item {
-                    Text("جنسیت:", fontWeight = FontWeight.Bold, color = textColor)
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = gender == "Male", onClick = { gender = "Male" })
-                            Text("آقا", modifier = Modifier.clickable { gender = "Male" }, color = textColor)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = gender == "Female", onClick = { gender = "Female" })
-                            Text("خانم", modifier = Modifier.clickable { gender = "Female" }, color = textColor)
-                        }
-                    }
-                }
-                item {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = hasBirthDate, onCheckedChange = { hasBirthDate = it })
-                        Text("ثبت تاریخ تولد و سن", modifier = Modifier.clickable { hasBirthDate = !hasBirthDate }, color = textColor)
-                    }
-                }
-                if (hasBirthDate) {
-                    item {
-                        InlineFarsiDatePicker(
-                            label = "تاریخ تولد:",
-                            initialDate = birthDateInput,
-                            onDateChanged = { birthDateInput = it }
-                        )
-                    }
-                }
-                item {
-                    AppTextField(
-                        value = birthPlace,
-                        onValueChange = { birthPlace = it },
-                        label = "محل زندگی / تولد"
-                    )
-                }
-                item {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = isSecondSpouse, onCheckedChange = { isSecondSpouse = it })
-                        Text("همسر دوم است", modifier = Modifier.clickable { isSecondSpouse = !isSecondSpouse }, color = textColor)
-                    }
-                }
-                
-                if (isSecondSpouse) {
-                    item {
-                        androidx.compose.material3.Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFFFFFDE7)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFBC02D).copy(alpha = 0.5f))
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("تنظیمات همسر دوم:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Checkbox(checked = isDivorced, onCheckedChange = { isDivorced = it })
-                                    Text("مطلقه (جدا شده)", modifier = Modifier.clickable { isDivorced = !isDivorced }, color = textColor, fontSize = 12.sp)
-                                }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Checkbox(checked = isDeceased, onCheckedChange = { isDeceased = it })
-                                    Text("فوت شده", modifier = Modifier.clickable { isDeceased = !isDeceased }, color = textColor, fontSize = 12.sp)
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    item {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = isDeceased, onCheckedChange = { isDeceased = it })
-                            Text("عضو فوت شده است", modifier = Modifier.clickable { isDeceased = !isDeceased }, color = textColor)
-                        }
-                    }
-                }
-                
-                if (isDeceased) {
-                    item {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = hasDeathDate, onCheckedChange = { hasDeathDate = it })
-                            Text("ثبت تاریخ فوت", modifier = Modifier.clickable { hasDeathDate = !hasDeathDate }, color = textColor)
-                        }
-                    }
-                    if (hasDeathDate) {
-                        item {
-                            InlineFarsiDatePicker(
-                                label = "تاریخ فوت:",
-                                initialDate = deathDateInput,
-                                onDateChanged = { deathDateInput = it }
-                            )
-                        }
-                    }
-                    item {
-                        AppTextField(
-                            value = deathPlace,
-                            onValueChange = { deathPlace = it },
-                            label = "محل فوت"
-                        )
-                    }
-                }
-                item {
-                    AppTextField(
-                        value = occupation,
-                        onValueChange = { occupation = it },
-                        label = "شغل / پیشه"
-                    )
-                }
-                item {
-                    AppTextField(
-                        value = biography,
-                        onValueChange = { biography = it },
-                        label = "شرح حال / بیوگرافی کوتاه",
-                        maxLines = 10
-                    )
-                }
-                
-                // Group selector
-                item {
-                    Text("گروه فامیلی همسر:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = textColor)
-                    var showGroupDropdown by remember { mutableStateOf(false) }
-                    val selectedGroupName = groups.find { it.id == selectedGroupIdForPerson }?.name ?: "انتخاب گروه فامیلی"
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Color.Gray.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                            .clickable { showGroupDropdown = true }
-                            .padding(12.dp)
+            title = { Text("ثبت همسر برای ${spouseOf.fullName}", fontWeight = FontWeight.Bold, color = textColor) },
+            text = {
+                Column {
+                    androidx.compose.material3.TabRow(
+                        selectedTabIndex = selectedTab,
+                        containerColor = Color.Transparent,
+                        contentColor = accentColor,
+                        modifier = Modifier.padding(bottom = 12.dp)
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
+                        androidx.compose.material3.Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            text = { Text("شخص جدید", fontWeight = FontWeight.Bold) }
+                        )
+                        androidx.compose.material3.Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            text = { Text("انتخاب از درخت", fontWeight = FontWeight.Bold) }
+                        )
+                    }
+                    
+                    if (selectedTab == 0) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text(selectedGroupName, color = textColor, fontSize = 14.sp)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = accentColor)
-                        }
-                        DropdownMenu(
-                            expanded = showGroupDropdown,
-                            onDismissRequest = { showGroupDropdown = false },
-                            modifier = Modifier.fillMaxWidth(0.8f).background(Color.White)
-                        ) {
-                            groups.forEach { g ->
-                                DropdownMenuItem(
-                                    text = { Text(g.name, fontSize = 13.sp, color = textColor) },
-                                    onClick = {
-                                        selectedGroupIdForPerson = g.id
-                                        showGroupDropdown = false
+                            item { AppTextField(value = firstName, onValueChange = { firstName = it }, label = "نام") }
+                            item { AppTextField(value = lastName, onValueChange = { lastName = it }, label = "نام خانوادگی") }
+                            item {
+                                Text("جنسیت:", fontWeight = FontWeight.Bold, color = textColor)
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        RadioButton(selected = gender == "Male", onClick = { gender = "Male" })
+                                        Text("آقا", modifier = Modifier.clickable { gender = "Male" }, color = textColor)
                                     }
-                                )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        RadioButton(selected = gender == "Female", onClick = { gender = "Female" })
+                                        Text("خانم", modifier = Modifier.clickable { gender = "Female" }, color = textColor)
+                                    }
+                                }
+                            }
+                            item {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(checked = hasBirthDate, onCheckedChange = { hasBirthDate = it })
+                                    Text("ثبت تاریخ تولد و سن", modifier = Modifier.clickable { hasBirthDate = !hasBirthDate }, color = textColor)
+                                }
+                            }
+                            if (hasBirthDate) {
+                                item { InlineFarsiDatePicker(label = "تاریخ تولد:", initialDate = birthDateInput, onDateChanged = { birthDateInput = it }) }
+                            }
+                            item { AppTextField(value = birthPlace, onValueChange = { birthPlace = it }, label = "محل زندگی / تولد") }
+                            item {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(checked = isSecondSpouse, onCheckedChange = { isSecondSpouse = it })
+                                    Text("همسر دوم است", modifier = Modifier.clickable { isSecondSpouse = !isSecondSpouse }, color = textColor)
+                                }
+                            }
+                            if (isSecondSpouse) {
+                                item {
+                                    androidx.compose.material3.Card(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFFFFFDE7)),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFBC02D).copy(alpha = 0.5f))
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text("تنظیمات همسر دوم:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Checkbox(checked = isDivorced, onCheckedChange = { isDivorced = it })
+                                                Text("مطلقه (جدا شده)", modifier = Modifier.clickable { isDivorced = !isDivorced }, color = textColor, fontSize = 12.sp)
+                                            }
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Checkbox(checked = isDeceased, onCheckedChange = { isDeceased = it })
+                                                Text("فوت شده", modifier = Modifier.clickable { isDeceased = !isDeceased }, color = textColor, fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                item {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Checkbox(checked = isDeceased, onCheckedChange = { isDeceased = it })
+                                        Text("عضو فوت شده است", modifier = Modifier.clickable { isDeceased = !isDeceased }, color = textColor)
+                                    }
+                                }
+                            }
+                            if (isDeceased) {
+                                item {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Checkbox(checked = hasDeathDate, onCheckedChange = { hasDeathDate = it })
+                                        Text("ثبت تاریخ فوت", modifier = Modifier.clickable { hasDeathDate = !hasDeathDate }, color = textColor)
+                                    }
+                                }
+                                if (hasDeathDate) {
+                                    item { InlineFarsiDatePicker(label = "تاریخ فوت:", initialDate = deathDateInput, onDateChanged = { deathDateInput = it }) }
+                                }
+                                item { AppTextField(value = deathPlace, onValueChange = { deathPlace = it }, label = "محل فوت") }
+                            }
+                            item { AppTextField(value = occupation, onValueChange = { occupation = it }, label = "شغل / پیشه") }
+                            item { AppTextField(value = biography, onValueChange = { biography = it }, label = "شرح حال / بیوگرافی کوتاه", maxLines = 10) }
+                            item {
+                                Text("گروه فامیلی همسر:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                var showGroupDropdown by remember { mutableStateOf(false) }
+                                val selectedGroupName = groups.find { it.id == selectedGroupIdForPerson }?.name ?: "انتخاب گروه فامیلی"
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().border(1.dp, Color.Gray.copy(alpha = 0.5f), RoundedCornerShape(8.dp)).clickable { showGroupDropdown = true }.padding(12.dp)
+                                ) {
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                        Text(selectedGroupName, color = textColor, fontSize = 14.sp)
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = accentColor)
+                                    }
+                                    DropdownMenu(expanded = showGroupDropdown, onDismissRequest = { showGroupDropdown = false }, modifier = Modifier.fillMaxWidth(0.8f).background(Color.White)) {
+                                        groups.forEach { g ->
+                                            DropdownMenuItem(
+                                                text = { Text(g.name, fontSize = 13.sp, color = textColor) },
+                                                onClick = { selectedGroupIdForPerson = g.id; showGroupDropdown = false }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 400.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("جستجو در اعضا...", fontSize = 12.sp, color = Color.Gray) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val filtered = allPersons.filter { it.id != spouseOf.id && (searchQuery.isBlank() || it.fullName.contains(searchQuery, ignoreCase = true)) }
+                                items(filtered) { p ->
+                                    val isSelected = selectedExistingPerson?.id == p.id
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().background(if (isSelected) accentColor.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(8.dp)).border(1.dp, if (isSelected) accentColor else Color.Gray.copy(alpha = 0.2f), RoundedCornerShape(8.dp)).clickable { selectedExistingPerson = p }.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(p.fullName, color = textColor, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f))
+                                        if (isSelected) Icon(Icons.Default.Check, contentDescription = null, tint = accentColor)
+                                    }
+                                }
+                            }
+                            androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth(), colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFFF9F9F9)), border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray)) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Checkbox(checked = isSecondSpouse, onCheckedChange = { isSecondSpouse = it })
+                                        Text("همسر دوم است", modifier = Modifier.clickable { isSecondSpouse = !isSecondSpouse }, color = textColor, fontSize = 12.sp)
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Checkbox(checked = isDivorced, onCheckedChange = { isDivorced = it })
+                                        Text("مطلقه (جدا شده)", modifier = Modifier.clickable { isDivorced = !isDivorced }, color = textColor, fontSize = 12.sp)
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            val context = androidx.compose.ui.platform.LocalContext.current
-            Button(
-                onClick = {
-                    if (firstName.trim().isBlank() || lastName.trim().isBlank()) {
-                        Toast.makeText(context, "تکمیل کادرهای نام و نام خانوادگی اجباری است", Toast.LENGTH_LONG).show()
-                    } else {
-                        val relType = if (isSecondSpouse) {
-                            if (isDivorced) "SecondSpouse_Divorced" else "SecondSpouse"
+            },
+            confirmButton = {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                Button(
+                    onClick = {
+                        if (selectedTab == 0) {
+                            if (firstName.trim().isBlank() || lastName.trim().isBlank()) {
+                                Toast.makeText(context, "تکمیل کادرهای نام و نام خانوادگی اجباری است", Toast.LENGTH_LONG).show()
+                            } else {
+                                val relType = if (isSecondSpouse) {
+                                    if (isDivorced) "SecondSpouse_Divorced" else "SecondSpouse"
+                                } else {
+                                    if (isDivorced) "Divorced" else "Spouse"
+                                }
+                                onConfirm(firstName.trim(), lastName.trim(), gender, if (hasBirthDate) birthDateInput.ifBlank { null } else null, birthPlace.ifBlank { null }, if (isDeceased && hasDeathDate) deathDateInput.ifBlank { null } else null, if (isDeceased) deathPlace.ifBlank { null } else null, isDeceased, occupation.ifBlank { null }, biography.ifBlank { null }, selectedGroupIdForPerson, relType)
+                            }
                         } else {
-                            if (isDivorced) "Divorced" else "Spouse"
+                            if (selectedExistingPerson == null) {
+                                Toast.makeText(context, "لطفاً یک نفر را از لیست انتخاب کنید", Toast.LENGTH_LONG).show()
+                            } else {
+                                val relType = if (isSecondSpouse) {
+                                    if (isDivorced) "SecondSpouse_Divorced" else "SecondSpouse"
+                                } else {
+                                    if (isDivorced) "Divorced" else "Spouse"
+                                }
+                                onConfirmExisting(selectedExistingPerson!!.id, relType)
+                            }
                         }
-                        onConfirm(
-                            firstName.trim(),
-                            lastName.trim(),
-                            gender,
-                            if (hasBirthDate) birthDateInput.ifBlank { null } else null,
-                            birthPlace.ifBlank { null },
-                            if (isDeceased && hasDeathDate) deathDateInput.ifBlank { null } else null,
-                            if (isDeceased) deathPlace.ifBlank { null } else null,
-                            isDeceased,
-                            occupation.ifBlank { null },
-                            biography.ifBlank { null },
-                            selectedGroupIdForPerson,
-                            relType
-                        )
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = accentColor)
-            ) {
-                Text("ثبت همسر")
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+                ) {
+                    Text("ثبت همسر")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("انصراف", color = textColor)
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("انصراف", color = textColor)
-            }
-        }
-    )
+        )
     }
 }
 
@@ -6557,7 +6767,7 @@ fun MemberDetailsDialog(
                         val relativeId = if (rel.personId1 == person.id) rel.personId2 else rel.personId1
                         val relative = allPersons.find { it.id == relativeId }
                         if (relative != null) {
-                            val relTypeName = if (spouseList.size > 1) {
+                            var relTypeName = if (spouseList.size > 1) {
                                 val isSecond = isSecondSpouseRelation(rel.type)
                                 val labelText = if (isSecond) "همسر دوم" else "همسر اول"
                                 val isEx = rel.type == "Divorced" || rel.type == "SecondSpouse_Divorced"
@@ -6566,6 +6776,12 @@ fun MemberDetailsDialog(
                                 val isEx = rel.type == "Divorced" || rel.type == "SecondSpouse_Divorced"
                                 if (isEx) "همسر سابق" else "همسر"
                             }
+                            
+                            val bloodRel = RelationshipCalculator.getBloodRelationshipNameBetweenSpouses(relative, person, allPersons, relationships)
+                            if (bloodRel != null) {
+                                relTypeName += " ($bloodRel)"
+                            }
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()

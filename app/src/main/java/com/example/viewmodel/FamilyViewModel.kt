@@ -201,6 +201,19 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
             repository.insertRelationship(Relationship(personId1 = g3f, personId2 = g4f, type = "Parent-Child"))
             repository.insertRelationship(Relationship(personId1 = g3m, personId2 = g4f, type = "Parent-Child"))
 
+            // عمو و عمه برای ایجاد ازدواج فامیلی
+            val g4_uncle = repository.insertPerson(Person(firstName = "حسین", lastName = "علوی", gender = "Male", birthDate = "1342-02-10", birthPlace = "تهران", isDeceased = false, occupation = "مهندس عمران", generation = 4, groupId = defaultGroupId))
+            val g4_uncle_wife = repository.insertPerson(Person(firstName = "میترا", lastName = "کرمی", gender = "Female", birthDate = "1348-05-11", birthPlace = "اصفهان", isDeceased = false, occupation = "معلم", generation = 4, groupId = defaultGroupId))
+            repository.insertRelationship(Relationship(personId1 = g4_uncle, personId2 = g4_uncle_wife, type = "Spouse"))
+            repository.insertRelationship(Relationship(personId1 = g3f, personId2 = g4_uncle, type = "Parent-Child"))
+            repository.insertRelationship(Relationship(personId1 = g3m, personId2 = g4_uncle, type = "Parent-Child"))
+
+            val g4_aunt = repository.insertPerson(Person(firstName = "مینا", lastName = "علوی", gender = "Female", birthDate = "1346-09-05", birthPlace = "تهران", isDeceased = false, occupation = "استاد دانشگاه", generation = 4, groupId = defaultGroupId))
+            val g4_aunt_husband = repository.insertPerson(Person(firstName = "جواد", lastName = "صابری", gender = "Male", birthDate = "1344-12-12", birthPlace = "مشهد", isDeceased = false, occupation = "وکیل", generation = 4, groupId = defaultGroupId))
+            repository.insertRelationship(Relationship(personId1 = g4_aunt, personId2 = g4_aunt_husband, type = "Spouse"))
+            repository.insertRelationship(Relationship(personId1 = g3f, personId2 = g4_aunt, type = "Parent-Child"))
+            repository.insertRelationship(Relationship(personId1 = g3m, personId2 = g4_aunt, type = "Parent-Child"))
+
             // Generation 5 (فرزندان)
             val g5f = repository.insertPerson(Person(firstName = "حمید", lastName = "علوی", gender = "Male", birthDate = "1370-03-10", birthPlace = "تهران", isDeceased = false, occupation = "مهندس هوش مصنوعی", generation = 5, groupId = defaultGroupId))
             val g5m = repository.insertPerson(Person(firstName = "الهام", lastName = "سهرابی", gender = "Female", birthDate = "1375-01-25", birthPlace = "شیراز", isDeceased = false, occupation = "طراح ارشد محصولات وب", generation = 5, groupId = defaultGroupId))
@@ -209,10 +222,35 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
             repository.insertRelationship(Relationship(personId1 = g4m, personId2 = g5f, type = "Parent-Child"))
 
             val g5d = repository.insertPerson(Person(firstName = "سارا", lastName = "علوی", gender = "Female", birthDate = "1373-11-12", birthPlace = "تهران", isDeceased = false, occupation = "مترجم و باستان‌شناس", generation = 5, groupId = defaultGroupId))
-            val g5dh = repository.insertPerson(Person(firstName = "کیوان", lastName = "راد", gender = "Male", birthDate = "1368-06-05", birthPlace = "رشت", isDeceased = false, occupation = "عکاس مستند حیات وحش", generation = 5, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g5dh, personId2 = g5d, type = "Spouse"))
-            repository.insertRelationship(Relationship(personId1 = g4f, personId2 = g5d, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g4m, personId2 = g5d, type = "Parent-Child"))
+            
+            // دختر عمو
+            val g5_cousin_f = repository.insertPerson(Person(firstName = "مریم", lastName = "علوی", gender = "Female", birthDate = "1372-06-20", birthPlace = "تهران", isDeceased = false, occupation = "دندانپزشک", generation = 5, groupId = defaultGroupId))
+            repository.insertRelationship(Relationship(personId1 = g4_uncle, personId2 = g5_cousin_f, type = "Parent-Child"))
+            repository.insertRelationship(Relationship(personId1 = g4_uncle_wife, personId2 = g5_cousin_f, type = "Parent-Child"))
+
+            // پسر عمه
+            val g5_cousin_m = repository.insertPerson(Person(firstName = "امیر", lastName = "صابری", gender = "Male", birthDate = "1371-08-15", birthPlace = "تهران", isDeceased = false, occupation = "پژوهشگر فیزیک", generation = 5, groupId = defaultGroupId))
+            repository.insertRelationship(Relationship(personId1 = g4_aunt, personId2 = g5_cousin_m, type = "Parent-Child"))
+            repository.insertRelationship(Relationship(personId1 = g4_aunt_husband, personId2 = g5_cousin_m, type = "Parent-Child"))
+
+            // ازدواج فامیلی ۱: پسر عمو و دختر عمو (حمید علوی و مریم علوی) - برای این کار یک برادر برای حمید میسازیم
+            val g5_brother = repository.insertPerson(Person(firstName = "امید", lastName = "علوی", gender = "Male", birthDate = "1371-04-10", birthPlace = "تهران", isDeceased = false, occupation = "داروساز", generation = 5, groupId = defaultGroupId))
+            repository.insertRelationship(Relationship(personId1 = g4f, personId2 = g5_brother, type = "Parent-Child"))
+            repository.insertRelationship(Relationship(personId1 = g4m, personId2 = g5_brother, type = "Parent-Child"))
+            repository.insertRelationship(Relationship(personId1 = g5_brother, personId2 = g5_cousin_f, type = "Spouse"))
+
+            // فرزند ازدواج فامیلی ۱
+            val g6_child1 = repository.insertPerson(Person(firstName = "پرهام", lastName = "علوی", gender = "Male", birthDate = "1401-02-10", birthPlace = "تهران", isDeceased = false, occupation = "کودک", generation = 6, groupId = defaultGroupId))
+            repository.insertRelationship(Relationship(personId1 = g5_brother, personId2 = g6_child1, type = "Parent-Child"))
+            repository.insertRelationship(Relationship(personId1 = g5_cousin_f, personId2 = g6_child1, type = "Parent-Child"))
+
+            // ازدواج فامیلی ۲: دختر دایی و پسر عمه (سارا علوی و امیر صابری)
+            repository.insertRelationship(Relationship(personId1 = g5d, personId2 = g5_cousin_m, type = "Spouse"))
+
+            // فرزند ازدواج فامیلی ۲
+            val g6_child2 = repository.insertPerson(Person(firstName = "نیکا", lastName = "صابری", gender = "Female", birthDate = "1399-10-25", birthPlace = "تهران", isDeceased = false, occupation = "کودک", generation = 6, groupId = defaultGroupId))
+            repository.insertRelationship(Relationship(personId1 = g5_cousin_m, personId2 = g6_child2, type = "Parent-Child"))
+            repository.insertRelationship(Relationship(personId1 = g5d, personId2 = g6_child2, type = "Parent-Child"))
         }
     }
 
@@ -357,6 +395,13 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
             }
 
             onComplete(childId)
+        }
+    }
+
+    
+    fun linkExistingSpouse(personId1: Long, personId2: Long, relationshipType: String = "Spouse") {
+        viewModelScope.launch {
+            repository.insertRelationship(Relationship(personId1 = personId1, personId2 = personId2, type = relationshipType))
         }
     }
 

@@ -1,0 +1,2 @@
+sed -i '/fun addSpouseToPerson/i \    fun linkExistingSpouse(personId1: Long, personId2: Long, relationshipType: String = "Spouse") {\n        viewModelScope.launch {\n            repository.insertRelationship(Relationship(personId1 = personId1, personId2 = personId2, type = relationshipType))\n            loadFamilyData()\n        }\n    }\n' app/src/main/java/com/example/viewmodel/FamilyViewModel.kt
+bash patch_vm.sh

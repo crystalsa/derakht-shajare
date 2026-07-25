@@ -290,4 +290,49 @@ object RelationshipCalculator {
         // Return a beautiful, descriptive full sentence
         return "${personA.firstName} $relationshipTerm ${personB.firstName} هست"
     }
+
+    /**
+     * Determines the consanguineous relationship between two spouses.
+     */
+    fun getBloodRelationshipNameBetweenSpouses(
+        spouseA: Person,
+        spouseB: Person,
+        allPersons: List<Person>,
+        allRelationships: List<Relationship>
+    ): String? {
+        val spouseTypes = listOf("Spouse", "Divorced", "SecondSpouse", "SecondSpouse_Divorced")
+        val parentTypes = listOf("Parent-Child", "Adoptive-Parent-Child")
+        
+        val childrenOfA = allRelationships.filter { 
+            it.personId1 == spouseA.id && it.type in parentTypes 
+        }.map { it.personId2 }.toSet()
+        val childrenOfB = allRelationships.filter { 
+            it.personId1 == spouseB.id && it.type in parentTypes 
+        }.map { it.personId2 }.toSet()
+        val commonChildren = childrenOfA.intersect(childrenOfB)
+
+        val filteredRelationships = allRelationships.filterNot { 
+            ((it.personId1 == spouseA.id && it.personId2 == spouseB.id && it.type in spouseTypes) ||
+            (it.personId1 == spouseB.id && it.personId2 == spouseA.id && it.type in spouseTypes))
+        }.filterNot {
+            (it.personId1 == spouseA.id && it.personId2 in commonChildren && it.type in parentTypes) ||
+            (it.personId1 == spouseB.id && it.personId2 in commonChildren && it.type in parentTypes)
+        }
+        
+        val path = findShortestPath(spouseB, spouseA, allPersons, filteredRelationships)
+        if (path == null || path.isEmpty()) return null
+        
+        val steps = path.drop(1).map { it.second }
+        var relationLabel = getRelationLabelFromSteps(steps, spouseA, spouseB).trim()
+        if (relationLabel.endsWith("ِ")) {
+            relationLabel = relationLabel.substring(0, relationLabel.length - 1)
+        }
+        if (relationLabel.endsWith("‌ی")) {
+            relationLabel = relationLabel.substring(0, relationLabel.length - 2)
+        } else if (relationLabel.endsWith("ی") && !relationLabel.endsWith("دایی")) {
+            relationLabel = relationLabel.substring(0, relationLabel.length - 1)
+        }
+        
+        return if (relationLabel != "خویشاوند") relationLabel else null
+    }
 }
