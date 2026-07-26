@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -794,10 +795,9 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
 
                                                  Text(
                                                      text = if (featuredPerson != null) {
-                                                         val birth = featuredPerson.birthDate?.split("-")?.firstOrNull() ?: ""
-                                                         val death = if (featuredPerson.isDeceased) featuredPerson.deathDate?.split("-")?.firstOrNull() ?: "؟" else ""
                                                          val prefix = if (focusPersonId != null) "شخص برجسته" else "سرشاخه خاندان"
-                                                         (if (featuredPerson.isDeceased) "$prefix ($birth - $death)" else "$prefix (متولد $birth)").toFarsiNumbers()
+                                                         val dateStr = formatLifeDates(featuredPerson.birthDate, featuredPerson.deathDate, featuredPerson.isDeceased, 1405)
+                                                         "$prefix - $dateStr".toFarsiNumbers()
                                                      } else "آغازگر شجره‌نامه",
                                                      fontSize = 11.sp,
                                                      color = textColor.copy(alpha = 0.7f),
@@ -979,7 +979,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                                                 if (focusPersonId != null) {
                                                     viewModel.setFocusPersonId(null)
                                                 } else {
-                                                    Toast.makeText(context, "برای فعال‌سازی نمای متمرکز، روی کارت شخص مورد نظر دوبار ضربه بزنید", Toast.LENGTH_LONG).show()
+                                                    Toast.makeText(context, "برای فعال‌سازی نمای متمرکز، روی کارت شخص مورد نظر دوبار ضربه بزنید (یا آیکون چشم را لمس کنید)", Toast.LENGTH_LONG).show()
                                                 }
                                             },
                                             colors = ButtonDefaults.buttonColors(
@@ -3828,6 +3828,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawElbowLine(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun FamilyMemberNodeCard(
     person: Person,
@@ -3869,7 +3870,12 @@ fun FamilyMemberNodeCard(
         .let { modifier ->
             modifier
         }
-        .clickable { onClick() }
+        .pointerInput(Unit) {
+            detectTapGestures(
+                onDoubleTap = { onDoubleTap() },
+                onTap = { onClick() }
+            )
+        }
         .testTag("member_node_${person.id}")
 
     Card(
@@ -4008,10 +4014,8 @@ fun FamilyMemberNodeCard(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                if (person.birthDate != null) {
-                    val year = person.birthDate.split("-").firstOrNull() ?: ""
-                    val deathYear = if (person.isDeceased) person.deathDate?.split("-")?.firstOrNull() ?: "؟" else ""
-                    val ageDisplay = if (person.isDeceased) "($year - $deathYear)" else "متولد $year"
+                if (person.birthDate != null || person.isDeceased) {
+                    val ageDisplay = formatLifeYearsOnlyLTR(person.birthDate, person.deathDate, person.isDeceased)
                     
                     Text(
                         text = ageDisplay.toFarsiNumbers(),
@@ -5373,6 +5377,8 @@ fun AddPersonDialog(
                 onClick = {
                     if (firstName.trim().isBlank() || lastName.trim().isBlank()) {
                         Toast.makeText(context, "تکمیل کادرهای نام و نام خانوادگی اجباری است", Toast.LENGTH_LONG).show()
+                    } else if (isDeceased && hasDeathDate && hasBirthDate && !validateBirthAndDeathDates(birthDateInput, deathDateInput)) {
+                        Toast.makeText(context, "تاریخ فوت نمی‌تواند کوچکتر از تاریخ تولد باشد", Toast.LENGTH_LONG).show()
                     } else {
                         onConfirm(
                             firstName.trim(),
@@ -5779,6 +5785,8 @@ fun EditPersonDialog(
                 onClick = {
                     if (firstName.trim().isBlank() || lastName.trim().isBlank()) {
                         Toast.makeText(context, "تکمیل کادرهای نام و نام خانوادگی اجباری است", Toast.LENGTH_LONG).show()
+                    } else if (isDeceased && hasDeathDate && hasBirthDate && !validateBirthAndDeathDates(birthDateInput, deathDateInput)) {
+                        Toast.makeText(context, "تاریخ فوت نمی‌تواند کوچکتر از تاریخ تولد باشد", Toast.LENGTH_LONG).show()
                     } else {
                         onConfirm(
                             person.copy(
@@ -6019,7 +6027,9 @@ fun AddSpouseDialog(
                     onClick = {
                         if (selectedTab == 0) {
                             if (firstName.trim().isBlank() || lastName.trim().isBlank()) {
-                                Toast.makeText(context, "تکمیل کادرهای نام و نام خانوادگی اجباری است", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "تکمیل کادرهای نام و نام خانوادگی اجباری است", Toast.LENGTH_LONG).show()
+                    } else if (isDeceased && hasDeathDate && hasBirthDate && !validateBirthAndDeathDates(birthDateInput, deathDateInput)) {
+                        Toast.makeText(context, "تاریخ فوت نمی‌تواند کوچکتر از تاریخ تولد باشد", Toast.LENGTH_LONG).show()
                             } else {
                                 val relType = if (isSecondSpouse) {
                                     if (isDivorced) "SecondSpouse_Divorced" else "SecondSpouse"
@@ -6067,6 +6077,7 @@ fun AddParentsDialog(
     onConfirm: (Person?, Person?) -> Unit
 ) {
     // Father states
+    val context = androidx.compose.ui.platform.LocalContext.current
     var addFather by remember { mutableStateOf(existingFather == null) }
     var fFirstName by remember { mutableStateOf("") }
     var fLastName by remember { mutableStateOf(child.lastName) }
@@ -6257,6 +6268,14 @@ fun AddParentsDialog(
             confirmButton = {
                 Button(
                     onClick = {
+                        if (fIsDeceased && fHasDeathDate && fHasBirthDate && !validateBirthAndDeathDates(fBirthDateInput, fDeathDateInput)) {
+                            Toast.makeText(context, "تاریخ فوت پدر نمی‌تواند کوچکتر از تاریخ تولد او باشد", Toast.LENGTH_LONG).show()
+                            return@Button
+                        }
+                        if (mIsDeceased && mHasDeathDate && mHasBirthDate && !validateBirthAndDeathDates(mBirthDateInput, mDeathDateInput)) {
+                            Toast.makeText(context, "تاریخ فوت مادر نمی‌تواند کوچکتر از تاریخ تولد او باشد", Toast.LENGTH_LONG).show()
+                            return@Button
+                        }
                         val father = if (existingFather == null && addFather && fFirstName.isNotBlank()) {
                             Person(
                                 firstName = fFirstName,
@@ -6583,10 +6602,12 @@ fun MemberDetailsDialog(
                             text = { Text("کپی اطلاعات عضو", color = textColor) },
                             onClick = {
                                 showActionMenu = false
+                                val dateLabel = if (person.isDeceased) "تاریخ حیات" else "تاریخ تولد"
+                                val dateValue = if (person.birthDate != null || person.isDeceased) formatLifeDates(person.birthDate, person.deathDate, person.isDeceased, 1405).toFarsiNumbers() else "ثبت نشده"
                                 val info = """
                                     نام: ${person.fullName}
                                     جنسیت: ${if (person.gender == "Male") "آقا" else "خانم"}
-                                    تاریخ تولد: ${person.birthDate ?: "ثبت نشده"}
+                                    $dateLabel: $dateValue
                                     محل زندگی: ${person.birthPlace ?: "ثبت نشده"}
                                     شغل: ${person.occupation ?: "ثبت نشده"}
                                     توضیحات: ${person.biography ?: "ثبت نشده"}
@@ -6675,11 +6696,11 @@ fun MemberDetailsDialog(
                     }
                 }
 
-                if (person.birthDate != null) {
+                if (person.birthDate != null || person.isDeceased) {
                     item {
                         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                            Text("تاریخ تولد:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
-                            Text(person.birthDate, color = textColor, fontSize = 12.sp)
+                            Text(if (person.isDeceased) "تاریخ حیات:" else "تاریخ تولد:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
+                            Text(formatLifeDates(person.birthDate, person.deathDate, person.isDeceased, 1405).toFarsiNumbers(), color = textColor, fontSize = 12.sp)
                         }
                     }
                 }
@@ -6703,9 +6724,7 @@ fun MemberDetailsDialog(
                         ) {
                             Column {
                                 Text("وضعیت: متوفی (مرحوم)", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                if (person.deathDate != null) {
-                                    Text("تاریخ فوت: ${person.deathDate}", color = textColor, fontSize = 11.sp)
-                                }
+
                                 if (person.deathPlace != null) {
                                     Text("محل فوت: ${person.deathPlace}", color = textColor, fontSize = 11.sp)
                                 }
