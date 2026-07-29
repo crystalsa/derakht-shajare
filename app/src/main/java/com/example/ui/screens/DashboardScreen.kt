@@ -1,5 +1,15 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculateCentroidSize
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.ui.input.pointer.positionChanged
+import kotlin.math.abs
+import kotlin.math.PI
+
 import android.widget.Toast
 import android.content.Context
 import android.net.Uri
@@ -2008,6 +2018,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
         val person = allPersonsRaw.find { it.id == showFullPhotoDialog!!.id } ?: showFullPhotoDialog!!
         val uris = person.photoUris
         var currentImageIndex by remember(person.id, uris.size) { mutableStateOf(0) }
+        var showPhotoDeleteConfirm by remember { mutableStateOf(false) }
         
         Dialog(onDismissRequest = { showFullPhotoDialog = null }) {
             Card(
@@ -2207,20 +2218,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                         // Delete photo
                         if (uris.isNotEmpty()) {
                             androidx.compose.material3.FilledTonalButton(
-                                onClick = {
-                                    val freshPerson = allPersonsRaw.find { it.id == person.id } ?: person
-                                    val currentUris = freshPerson.photoUris.toMutableList()
-                                    if (currentUris.isNotEmpty() && currentImageIndex in currentUris.indices) {
-                                        currentUris.removeAt(currentImageIndex)
-                                        val newPhotoUri = if (currentUris.isEmpty()) null else currentUris.joinToString("|")
-                                        val updatedPerson = freshPerson.copy(photoUri = newPhotoUri)
-                                        viewModel.updatePerson(updatedPerson)
-                                        Toast.makeText(context, "عکس با موفقیت حذف شد", Toast.LENGTH_SHORT).show()
-                                        if (currentImageIndex >= currentUris.size && currentImageIndex > 0) {
-                                            currentImageIndex--
-                                        }
-                                    }
-                                },
+                                onClick = { showPhotoDeleteConfirm = true },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(50.dp),
@@ -2272,6 +2270,44 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                         }
                     }
                 }
+            }
+            
+            if (showPhotoDeleteConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showPhotoDeleteConfirm = false },
+                    title = { Text("حذف عکس", fontWeight = FontWeight.Bold, color = Color(0xFFC62828)) },
+                    text = { Text("آیا مطمئن هستید که می‌خواهید این عکس را حذف کنید؟", fontSize = 14.sp) },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val freshPerson = allPersonsRaw.find { it.id == person.id } ?: person
+                                val currentUris = freshPerson.photoUris.toMutableList()
+                                if (currentUris.isNotEmpty() && currentImageIndex in currentUris.indices) {
+                                    currentUris.removeAt(currentImageIndex)
+                                    val newPhotoUri = if (currentUris.isEmpty()) null else currentUris.joinToString("|")
+                                    val updatedPerson = freshPerson.copy(photoUri = newPhotoUri)
+                                    viewModel.updatePerson(updatedPerson)
+                                    Toast.makeText(context, "عکس با موفقیت حذف شد", Toast.LENGTH_SHORT).show()
+                                    if (currentImageIndex >= currentUris.size && currentImageIndex > 0) {
+                                        currentImageIndex--
+                                    }
+                                }
+                                showPhotoDeleteConfirm = false
+                                if (currentUris.isEmpty() || currentUris.size == 1) { // If it was 1, now it's 0.
+                                    showFullPhotoDialog = null
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+                        ) {
+                            Text("حذف")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showPhotoDeleteConfirm = false }) {
+                            Text("انصراف", color = textColor)
+                        }
+                    }
+                )
             }
         }
     }
@@ -3542,7 +3578,7 @@ fun InteractiveFamilyTree(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
+                detectTreeTransformGestures { _, pan, zoom, _ ->
                     scale = (scale * zoom).coerceIn(0.2f, 3f)
                     val newOffset = animatableOffset.value + pan
                     coroutineScope.launch {
@@ -7896,3 +7932,60 @@ fun Long.toFarsiNumbers(): String {
     return this.toString().toFarsiNumbers()
 }
 
+
+
+
+
+suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectTreeTransformGestures(
+    panZoomLock: Boolean = false,
+    onGesture: (centroid: androidx.compose.ui.geometry.Offset, pan: androidx.compose.ui.geometry.Offset, zoom: Float, rotation: Float) -> Unit,
+) {
+    awaitEachGesture {
+        var rotation = 0f
+        var zoom = 1f
+        var pan = androidx.compose.ui.geometry.Offset.Zero
+        var pastTouchSlop = false
+        val touchSlop = viewConfiguration.touchSlop
+        var lockedToPanZoom = false
+
+        awaitFirstDown(requireUnconsumed = false)
+        do {
+            val event = awaitPointerEvent()
+            // We ignore canceled state so we can zoom even if children consume the down event!
+            val canceled = false 
+            if (!canceled) {
+                val zoomChange = event.calculateZoom()
+                val rotationChange = 0f // We don't need rotation
+                val panChange = event.calculatePan()
+
+                if (!pastTouchSlop) {
+                    zoom *= zoomChange
+                    pan += panChange
+
+                    val centroidSize = event.calculateCentroidSize(useCurrent = false)
+                    val zoomMotion = abs(1 - zoom) * centroidSize
+                    val panMotion = pan.getDistance()
+
+                    if (
+                        zoomMotion > touchSlop ||
+                            panMotion > touchSlop
+                    ) {
+                        pastTouchSlop = true
+                    }
+                }
+
+                if (pastTouchSlop) {
+                    val centroid = event.calculateCentroid(useCurrent = false)
+                    if (zoomChange != 1f || panChange != androidx.compose.ui.geometry.Offset.Zero) {
+                        onGesture(centroid, panChange, zoomChange, 0f)
+                    }
+                    event.changes.forEach {
+                        if (it.positionChanged()) {
+                            it.consume()
+                        }
+                    }
+                }
+            }
+        } while (!canceled && event.changes.any { it.pressed })
+    }
+}
