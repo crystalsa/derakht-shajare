@@ -370,7 +370,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     if (databaseError != null) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             AlertDialog(
-                onDismissRequest = { },
+                onDismissRequest = { viewModel.clearDatabaseError() },
                 title = { Text("خطای پایگاه داده", fontWeight = FontWeight.Bold, color = Color.Red) },
                 text = { Text("""متاسفانه در بارگذاری اطلاعات مشکلی رخ داد:
 
@@ -378,8 +378,11 @@ $databaseError
 
 لطفا برنامه را دوباره اجرا کنید.""", color = Color.Black) },
                 confirmButton = {
-                    Button(onClick = { /* no-op */ }) {
-                        Text("باشه")
+                    Button(onClick = { 
+                        viewModel.clearDatabaseError()
+                        viewModel.retryDatabaseInit() 
+                    }) {
+                        Text("تلاش مجدد")
                     }
                 }
             )
