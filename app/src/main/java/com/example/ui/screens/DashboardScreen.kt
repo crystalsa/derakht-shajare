@@ -25,7 +25,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
+import com.example.utils.detectTransformGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -362,6 +362,35 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
         relationships.filter { rel ->
             personIds.contains(rel.personId1) && personIds.contains(rel.personId2)
         }
+    }
+
+    val isDatabaseReady by viewModel.isDatabaseReady.collectAsStateWithLifecycle()
+    val databaseError by viewModel.databaseError.collectAsStateWithLifecycle()
+
+    if (databaseError != null) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            AlertDialog(
+                onDismissRequest = { },
+                title = { Text("خطای پایگاه داده", fontWeight = FontWeight.Bold, color = Color.Red) },
+                text = { Text("""متاسفانه در بارگذاری اطلاعات مشکلی رخ داد:
+
+$databaseError
+
+لطفا برنامه را دوباره اجرا کنید.""", color = Color.Black) },
+                confirmButton = {
+                    Button(onClick = { /* no-op */ }) {
+                        Text("باشه")
+                    }
+                }
+            )
+        }
+    }
+
+    if (!isDatabaseReady) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.White), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Color(0xFFF57C00))
+        }
+        return
     }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -806,7 +835,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                                                  Text(
                                                      text = if (featuredPerson != null) {
                                                          val prefix = if (focusPersonId != null) "شخص برجسته" else "سرشاخه خاندان"
-                                                         val dateStr = formatLifeDates(featuredPerson.birthDate, featuredPerson.deathDate, featuredPerson.isDeceased, 1405)
+                                                         val dateStr = formatLifeDates(featuredPerson.birthDate, featuredPerson.deathDate, featuredPerson.isDeceased, getCurrentJalaliYear())
                                                          "$prefix - $dateStr".toFarsiNumbers()
                                                      } else "آغازگر شجره‌نامه",
                                                      fontSize = 11.sp,
@@ -3578,7 +3607,7 @@ fun InteractiveFamilyTree(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                detectTreeTransformGestures { _, pan, zoom, _ ->
+                detectTransformGestures { _, pan, zoom, _ ->
                     scale = (scale * zoom).coerceIn(0.2f, 3f)
                     val newOffset = animatableOffset.value + pan
                     coroutineScope.launch {
@@ -4197,6 +4226,9 @@ fun computeTreeLayoutPositions(
 
     val visiblePersonSet = visiblePersonIds.toSet()
     val visitedSubtrees = mutableSetOf<Long>()
+    val isHorizontal = layoutType == "Horizontal"
+    val spouseSpacing = if (isHorizontal) 240f else 180f
+    val siblingSpacing = if (isHorizontal) 260f else 200f
 
     fun layoutSubtree(personId: Long, level: Int): SubtreeLayout {
         // Find spouse group
@@ -4215,8 +4247,6 @@ fun computeTreeLayoutPositions(
         
         spouseGroup.forEach { visitedSubtrees.add(it) }
         
-        val spouseSpacing = 180f
-        val siblingSpacing = 180f
         val S = fullGroupForLayout.size
         
         // Initial positions of spouses centered at 0
@@ -4385,7 +4415,6 @@ fun computeTreeLayoutPositions(
     val finalPositions = mutableMapOf<Long, Float>()
     val finalShadowPositions = mutableMapOf<String, Float>()
     val globalMaxX = mutableMapOf<Int, Float>()
-    val siblingSpacing = 180f
 
     for (i in allSubtreeLayouts.indices) {
         val layout = allSubtreeLayouts[i]
@@ -6639,7 +6668,7 @@ fun MemberDetailsDialog(
                             onClick = {
                                 showActionMenu = false
                                 val dateLabel = if (person.isDeceased) "تاریخ حیات" else "تاریخ تولد"
-                                val dateValue = if (person.birthDate != null || person.isDeceased) formatLifeDates(person.birthDate, person.deathDate, person.isDeceased, 1405).toFarsiNumbers() else "ثبت نشده"
+                                val dateValue = if (person.birthDate != null || person.isDeceased) formatLifeDates(person.birthDate, person.deathDate, person.isDeceased, getCurrentJalaliYear()).toFarsiNumbers() else "ثبت نشده"
                                 val info = """
                                     نام: ${person.fullName}
                                     جنسیت: ${if (person.gender == "Male") "آقا" else "خانم"}
@@ -6736,7 +6765,7 @@ fun MemberDetailsDialog(
                     item {
                         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                             Text(if (person.isDeceased) "تاریخ حیات:" else "تاریخ تولد:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
-                            Text(formatLifeDates(person.birthDate, person.deathDate, person.isDeceased, 1405).toFarsiNumbers(), color = textColor, fontSize = 12.sp)
+                            Text(formatLifeDates(person.birthDate, person.deathDate, person.isDeceased, getCurrentJalaliYear()).toFarsiNumbers(), color = textColor, fontSize = 12.sp)
                         }
                     }
                 }
@@ -7465,7 +7494,7 @@ fun FamilyOverviewStatsDialog(
     }
     
     val averageAge = remember(persons) {
-        val currentYear = 1405 // solar hijri equivalent
+        val currentYear = getCurrentJalaliYear() // solar hijri equivalent
         val ageList = persons.mapNotNull { p ->
             val birthYearStr = p.birthDate?.split("-")?.firstOrNull()?.filter { it.isDigit() }
             val birthYear = birthYearStr?.toIntOrNull()
@@ -7936,56 +7965,3 @@ fun Long.toFarsiNumbers(): String {
 
 
 
-suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectTreeTransformGestures(
-    panZoomLock: Boolean = false,
-    onGesture: (centroid: androidx.compose.ui.geometry.Offset, pan: androidx.compose.ui.geometry.Offset, zoom: Float, rotation: Float) -> Unit,
-) {
-    awaitEachGesture {
-        var rotation = 0f
-        var zoom = 1f
-        var pan = androidx.compose.ui.geometry.Offset.Zero
-        var pastTouchSlop = false
-        val touchSlop = viewConfiguration.touchSlop
-        var lockedToPanZoom = false
-
-        awaitFirstDown(requireUnconsumed = false)
-        do {
-            val event = awaitPointerEvent()
-            // We ignore canceled state so we can zoom even if children consume the down event!
-            val canceled = false 
-            if (!canceled) {
-                val zoomChange = event.calculateZoom()
-                val rotationChange = 0f // We don't need rotation
-                val panChange = event.calculatePan()
-
-                if (!pastTouchSlop) {
-                    zoom *= zoomChange
-                    pan += panChange
-
-                    val centroidSize = event.calculateCentroidSize(useCurrent = false)
-                    val zoomMotion = abs(1 - zoom) * centroidSize
-                    val panMotion = pan.getDistance()
-
-                    if (
-                        zoomMotion > touchSlop ||
-                            panMotion > touchSlop
-                    ) {
-                        pastTouchSlop = true
-                    }
-                }
-
-                if (pastTouchSlop) {
-                    val centroid = event.calculateCentroid(useCurrent = false)
-                    if (zoomChange != 1f || panChange != androidx.compose.ui.geometry.Offset.Zero) {
-                        onGesture(centroid, panChange, zoomChange, 0f)
-                    }
-                    event.changes.forEach {
-                        if (it.positionChanged()) {
-                            it.consume()
-                        }
-                    }
-                }
-            }
-        } while (!canceled && event.changes.any { it.pressed })
-    }
-}

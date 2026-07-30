@@ -15,11 +15,22 @@ import java.util.*
 
 class FamilyViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository: FamilyRepository
+    private var repository: FamilyRepository? = null
     
-    val allPersons: StateFlow<List<Person>>
-    val allRelationships: StateFlow<List<Relationship>>
-    val allGroups: StateFlow<List<com.example.data.FamilyGroup>>
+    private val _allPersons = MutableStateFlow<List<Person>>(emptyList())
+    val allPersons = _allPersons.asStateFlow()
+    
+    private val _allRelationships = MutableStateFlow<List<Relationship>>(emptyList())
+    val allRelationships = _allRelationships.asStateFlow()
+    
+    private val _allGroups = MutableStateFlow<List<com.example.data.FamilyGroup>>(emptyList())
+    val allGroups = _allGroups.asStateFlow()
+    
+    private val _isDatabaseReady = MutableStateFlow(false)
+    val isDatabaseReady = _isDatabaseReady.asStateFlow()
+    
+    private val _databaseError = MutableStateFlow<String?>(null)
+    val databaseError = _databaseError.asStateFlow()
 
     // UI Search & Filter states
     private val _searchQuery = MutableStateFlow("")
@@ -60,17 +71,21 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     private var glowJob: kotlinx.coroutines.Job? = null
 
     init {
-        val database = FamilyDatabase.getDatabase(application)
-        repository = FamilyRepository(database.familyDao())
-        
-        allPersons = repository.allPersons
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-            
-        allRelationships = repository.allRelationships
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-        allGroups = repository.allGroups
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val database = FamilyDatabase.getDatabase(application)
+                val repo = FamilyRepository(database.familyDao())
+                repository = repo
+                
+                launch { repo.allPersons.collect { _allPersons.value = it } }
+                launch { repo.allRelationships.collect { _allRelationships.value = it } }
+                launch { repo.allGroups.collect { _allGroups.value = it } }
+                
+                _isDatabaseReady.value = true
+            } catch (e: Exception) {
+                _databaseError.value = e.message ?: "Unknown database error"
+            }
+        }
     }
 
     // Search and filtered persons
@@ -164,99 +179,99 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
             if (allPersons.value.isNotEmpty()) return@launch
 
             // Create a default group
-            val defaultGroupId = repository.insertGroup(
+            val defaultGroupId = repository!!.insertGroup(
                 com.example.data.FamilyGroup(name = "خانواده بزرگ علوی", description = "شجره‌نامه تاریخی خاندان علوی و بستگان نزدیک")
             )
 
             // Generation 0 (بزرگ خاندان اول)
-            val g0f = repository.insertPerson(Person(firstName = "حاج میرزا", lastName = "علوی", gender = "Male", birthDate = "1220-01-01", birthPlace = "کاشان", deathDate = "1300-05-12", isDeceased = true, occupation = "تاجر بزرگ فرش", generation = 0, groupId = defaultGroupId))
-            val g0m = repository.insertPerson(Person(firstName = "بی‌بی خاتون", lastName = "حسینی", gender = "Female", birthDate = "1225-04-15", birthPlace = "یزد", deathDate = "1305-10-20", isDeceased = true, occupation = "خانه‌دار", generation = 0, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g0f, personId2 = g0m, type = "Spouse"))
+            val g0f = repository!!.insertPerson(Person(firstName = "حاج میرزا", lastName = "علوی", gender = "Male", birthDate = "1220-01-01", birthPlace = "کاشان", deathDate = "1300-05-12", isDeceased = true, occupation = "تاجر بزرگ فرش", generation = 0, groupId = defaultGroupId))
+            val g0m = repository!!.insertPerson(Person(firstName = "بی‌بی خاتون", lastName = "حسینی", gender = "Female", birthDate = "1225-04-15", birthPlace = "یزد", deathDate = "1305-10-20", isDeceased = true, occupation = "خانه‌دار", generation = 0, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g0f, personId2 = g0m, type = "Spouse"))
 
             // Generation 1 (پدربزرگ و مادربزرگ بزرگ)
-            val g1f = repository.insertPerson(Person(firstName = "حاج رضا", lastName = "علوی", gender = "Male", birthDate = "1250-07-22", birthPlace = "کاشان", deathDate = "1320-02-10", isDeceased = true, occupation = "حکیم‌باشی طب سنتی", generation = 1, groupId = defaultGroupId))
-            val g1m = repository.insertPerson(Person(firstName = "سکینه", lastName = "عباسی", gender = "Female", birthDate = "1255-03-10", birthPlace = "قم", deathDate = "1325-06-18", isDeceased = true, occupation = "خانه‌دار", generation = 1, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g1f, personId2 = g1m, type = "Spouse"))
-            repository.insertRelationship(Relationship(personId1 = g0f, personId2 = g1f, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g0m, personId2 = g1f, type = "Parent-Child"))
+            val g1f = repository!!.insertPerson(Person(firstName = "حاج رضا", lastName = "علوی", gender = "Male", birthDate = "1250-07-22", birthPlace = "کاشان", deathDate = "1320-02-10", isDeceased = true, occupation = "حکیم‌باشی طب سنتی", generation = 1, groupId = defaultGroupId))
+            val g1m = repository!!.insertPerson(Person(firstName = "سکینه", lastName = "عباسی", gender = "Female", birthDate = "1255-03-10", birthPlace = "قم", deathDate = "1325-06-18", isDeceased = true, occupation = "خانه‌دار", generation = 1, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g1f, personId2 = g1m, type = "Spouse"))
+            repository!!.insertRelationship(Relationship(personId1 = g0f, personId2 = g1f, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g0m, personId2 = g1f, type = "Parent-Child"))
 
             // Generation 2 (پدربزرگ و مادربزرگ اصلی)
-            val g2f = repository.insertPerson(Person(firstName = "محمد", lastName = "علوی", gender = "Male", birthDate = "1280-12-05", birthPlace = "اصفهان", deathDate = "1350-09-18", isDeceased = true, occupation = "معمار بناهای سنتی", generation = 2, groupId = defaultGroupId))
-            val g2m = repository.insertPerson(Person(firstName = "زهرا", lastName = "حسینی", gender = "Female", birthDate = "1285-09-18", birthPlace = "شیراز", deathDate = "1360-11-22", isDeceased = true, occupation = "شاعر مکتب‌خانه", generation = 2, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g2f, personId2 = g2m, type = "Spouse"))
-            repository.insertRelationship(Relationship(personId1 = g1f, personId2 = g2f, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g1m, personId2 = g2f, type = "Parent-Child"))
+            val g2f = repository!!.insertPerson(Person(firstName = "محمد", lastName = "علوی", gender = "Male", birthDate = "1280-12-05", birthPlace = "اصفهان", deathDate = "1350-09-18", isDeceased = true, occupation = "معمار بناهای سنتی", generation = 2, groupId = defaultGroupId))
+            val g2m = repository!!.insertPerson(Person(firstName = "زهرا", lastName = "حسینی", gender = "Female", birthDate = "1285-09-18", birthPlace = "شیراز", deathDate = "1360-11-22", isDeceased = true, occupation = "شاعر مکتب‌خانه", generation = 2, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g2f, personId2 = g2m, type = "Spouse"))
+            repository!!.insertRelationship(Relationship(personId1 = g1f, personId2 = g2f, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g1m, personId2 = g2f, type = "Parent-Child"))
 
             // Generation 3 (والدین بزرگ)
-            val g3f = repository.insertPerson(Person(firstName = "علی", lastName = "علوی", gender = "Male", birthDate = "1310-11-25", birthPlace = "تهران", deathDate = "1390-04-12", isDeceased = true, occupation = "استاد ادبیات فارسی دانشگاه", generation = 3, groupId = defaultGroupId))
-            val g3m = repository.insertPerson(Person(firstName = "مژگان", lastName = "رضایی", gender = "Female", birthDate = "1315-02-14", birthPlace = "تهران", deathDate = "1395-07-30", isDeceased = true, occupation = "نویسنده کتاب کودک", generation = 3, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g3f, personId2 = g3m, type = "Spouse"))
-            repository.insertRelationship(Relationship(personId1 = g2f, personId2 = g3f, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g2m, personId2 = g3f, type = "Parent-Child"))
+            val g3f = repository!!.insertPerson(Person(firstName = "علی", lastName = "علوی", gender = "Male", birthDate = "1310-11-25", birthPlace = "تهران", deathDate = "1390-04-12", isDeceased = true, occupation = "استاد ادبیات فارسی دانشگاه", generation = 3, groupId = defaultGroupId))
+            val g3m = repository!!.insertPerson(Person(firstName = "مژگان", lastName = "رضایی", gender = "Female", birthDate = "1315-02-14", birthPlace = "تهران", deathDate = "1395-07-30", isDeceased = true, occupation = "نویسنده کتاب کودک", generation = 3, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g3f, personId2 = g3m, type = "Spouse"))
+            repository!!.insertRelationship(Relationship(personId1 = g2f, personId2 = g3f, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g2m, personId2 = g3f, type = "Parent-Child"))
 
             // Generation 4 (والدین)
-            val g4f = repository.insertPerson(Person(firstName = "رضا", lastName = "علوی", gender = "Male", birthDate = "1340-05-15", birthPlace = "تهران", isDeceased = false, occupation = "پزشک متخصص قلب", generation = 4, groupId = defaultGroupId))
-            val g4m = repository.insertPerson(Person(firstName = "فاطمه", lastName = "محسنی", gender = "Female", birthDate = "1345-08-20", birthPlace = "تبریز", isDeceased = false, occupation = "داروساز داروخانه ملی", generation = 4, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g4f, personId2 = g4m, type = "Spouse"))
-            repository.insertRelationship(Relationship(personId1 = g3f, personId2 = g4f, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g3m, personId2 = g4f, type = "Parent-Child"))
+            val g4f = repository!!.insertPerson(Person(firstName = "رضا", lastName = "علوی", gender = "Male", birthDate = "1340-05-15", birthPlace = "تهران", isDeceased = false, occupation = "پزشک متخصص قلب", generation = 4, groupId = defaultGroupId))
+            val g4m = repository!!.insertPerson(Person(firstName = "فاطمه", lastName = "محسنی", gender = "Female", birthDate = "1345-08-20", birthPlace = "تبریز", isDeceased = false, occupation = "داروساز داروخانه ملی", generation = 4, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g4f, personId2 = g4m, type = "Spouse"))
+            repository!!.insertRelationship(Relationship(personId1 = g3f, personId2 = g4f, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g3m, personId2 = g4f, type = "Parent-Child"))
 
             // عمو و عمه برای ایجاد ازدواج فامیلی
-            val g4_uncle = repository.insertPerson(Person(firstName = "حسین", lastName = "علوی", gender = "Male", birthDate = "1342-02-10", birthPlace = "تهران", isDeceased = false, occupation = "مهندس عمران", generation = 4, groupId = defaultGroupId))
-            val g4_uncle_wife = repository.insertPerson(Person(firstName = "میترا", lastName = "کرمی", gender = "Female", birthDate = "1348-05-11", birthPlace = "اصفهان", isDeceased = false, occupation = "معلم", generation = 4, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g4_uncle, personId2 = g4_uncle_wife, type = "Spouse"))
-            repository.insertRelationship(Relationship(personId1 = g3f, personId2 = g4_uncle, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g3m, personId2 = g4_uncle, type = "Parent-Child"))
+            val g4_uncle = repository!!.insertPerson(Person(firstName = "حسین", lastName = "علوی", gender = "Male", birthDate = "1342-02-10", birthPlace = "تهران", isDeceased = false, occupation = "مهندس عمران", generation = 4, groupId = defaultGroupId))
+            val g4_uncle_wife = repository!!.insertPerson(Person(firstName = "میترا", lastName = "کرمی", gender = "Female", birthDate = "1348-05-11", birthPlace = "اصفهان", isDeceased = false, occupation = "معلم", generation = 4, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g4_uncle, personId2 = g4_uncle_wife, type = "Spouse"))
+            repository!!.insertRelationship(Relationship(personId1 = g3f, personId2 = g4_uncle, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g3m, personId2 = g4_uncle, type = "Parent-Child"))
 
-            val g4_aunt = repository.insertPerson(Person(firstName = "مینا", lastName = "علوی", gender = "Female", birthDate = "1346-09-05", birthPlace = "تهران", isDeceased = false, occupation = "استاد دانشگاه", generation = 4, groupId = defaultGroupId))
-            val g4_aunt_husband = repository.insertPerson(Person(firstName = "جواد", lastName = "صابری", gender = "Male", birthDate = "1344-12-12", birthPlace = "مشهد", isDeceased = false, occupation = "وکیل", generation = 4, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g4_aunt, personId2 = g4_aunt_husband, type = "Spouse"))
-            repository.insertRelationship(Relationship(personId1 = g3f, personId2 = g4_aunt, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g3m, personId2 = g4_aunt, type = "Parent-Child"))
+            val g4_aunt = repository!!.insertPerson(Person(firstName = "مینا", lastName = "علوی", gender = "Female", birthDate = "1346-09-05", birthPlace = "تهران", isDeceased = false, occupation = "استاد دانشگاه", generation = 4, groupId = defaultGroupId))
+            val g4_aunt_husband = repository!!.insertPerson(Person(firstName = "جواد", lastName = "صابری", gender = "Male", birthDate = "1344-12-12", birthPlace = "مشهد", isDeceased = false, occupation = "وکیل", generation = 4, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g4_aunt, personId2 = g4_aunt_husband, type = "Spouse"))
+            repository!!.insertRelationship(Relationship(personId1 = g3f, personId2 = g4_aunt, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g3m, personId2 = g4_aunt, type = "Parent-Child"))
 
             // Generation 5 (فرزندان)
-            val g5f = repository.insertPerson(Person(firstName = "حمید", lastName = "علوی", gender = "Male", birthDate = "1370-03-10", birthPlace = "تهران", isDeceased = false, occupation = "مهندس هوش مصنوعی", generation = 5, groupId = defaultGroupId))
-            val g5m = repository.insertPerson(Person(firstName = "الهام", lastName = "سهرابی", gender = "Female", birthDate = "1375-01-25", birthPlace = "شیراز", isDeceased = false, occupation = "طراح ارشد محصولات وب", generation = 5, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g5f, personId2 = g5m, type = "Spouse"))
-            repository.insertRelationship(Relationship(personId1 = g4f, personId2 = g5f, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g4m, personId2 = g5f, type = "Parent-Child"))
+            val g5f = repository!!.insertPerson(Person(firstName = "حمید", lastName = "علوی", gender = "Male", birthDate = "1370-03-10", birthPlace = "تهران", isDeceased = false, occupation = "مهندس هوش مصنوعی", generation = 5, groupId = defaultGroupId))
+            val g5m = repository!!.insertPerson(Person(firstName = "الهام", lastName = "سهرابی", gender = "Female", birthDate = "1375-01-25", birthPlace = "شیراز", isDeceased = false, occupation = "طراح ارشد محصولات وب", generation = 5, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g5f, personId2 = g5m, type = "Spouse"))
+            repository!!.insertRelationship(Relationship(personId1 = g4f, personId2 = g5f, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g4m, personId2 = g5f, type = "Parent-Child"))
 
-            val g5d = repository.insertPerson(Person(firstName = "سارا", lastName = "علوی", gender = "Female", birthDate = "1373-11-12", birthPlace = "تهران", isDeceased = false, occupation = "مترجم و باستان‌شناس", generation = 5, groupId = defaultGroupId))
+            val g5d = repository!!.insertPerson(Person(firstName = "سارا", lastName = "علوی", gender = "Female", birthDate = "1373-11-12", birthPlace = "تهران", isDeceased = false, occupation = "مترجم و باستان‌شناس", generation = 5, groupId = defaultGroupId))
             
             // دختر عمو
-            val g5_cousin_f = repository.insertPerson(Person(firstName = "مریم", lastName = "علوی", gender = "Female", birthDate = "1372-06-20", birthPlace = "تهران", isDeceased = false, occupation = "دندانپزشک", generation = 5, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g4_uncle, personId2 = g5_cousin_f, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g4_uncle_wife, personId2 = g5_cousin_f, type = "Parent-Child"))
+            val g5_cousin_f = repository!!.insertPerson(Person(firstName = "مریم", lastName = "علوی", gender = "Female", birthDate = "1372-06-20", birthPlace = "تهران", isDeceased = false, occupation = "دندانپزشک", generation = 5, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g4_uncle, personId2 = g5_cousin_f, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g4_uncle_wife, personId2 = g5_cousin_f, type = "Parent-Child"))
 
             // پسر عمه
-            val g5_cousin_m = repository.insertPerson(Person(firstName = "امیر", lastName = "صابری", gender = "Male", birthDate = "1371-08-15", birthPlace = "تهران", isDeceased = false, occupation = "پژوهشگر فیزیک", generation = 5, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g4_aunt, personId2 = g5_cousin_m, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g4_aunt_husband, personId2 = g5_cousin_m, type = "Parent-Child"))
+            val g5_cousin_m = repository!!.insertPerson(Person(firstName = "امیر", lastName = "صابری", gender = "Male", birthDate = "1371-08-15", birthPlace = "تهران", isDeceased = false, occupation = "پژوهشگر فیزیک", generation = 5, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g4_aunt, personId2 = g5_cousin_m, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g4_aunt_husband, personId2 = g5_cousin_m, type = "Parent-Child"))
 
             // ازدواج فامیلی ۱: پسر عمو و دختر عمو (حمید علوی و مریم علوی) - برای این کار یک برادر برای حمید میسازیم
-            val g5_brother = repository.insertPerson(Person(firstName = "امید", lastName = "علوی", gender = "Male", birthDate = "1371-04-10", birthPlace = "تهران", isDeceased = false, occupation = "داروساز", generation = 5, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g4f, personId2 = g5_brother, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g4m, personId2 = g5_brother, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g5_brother, personId2 = g5_cousin_f, type = "Spouse"))
+            val g5_brother = repository!!.insertPerson(Person(firstName = "امید", lastName = "علوی", gender = "Male", birthDate = "1371-04-10", birthPlace = "تهران", isDeceased = false, occupation = "داروساز", generation = 5, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g4f, personId2 = g5_brother, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g4m, personId2 = g5_brother, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g5_brother, personId2 = g5_cousin_f, type = "Spouse"))
 
             // فرزند ازدواج فامیلی ۱
-            val g6_child1 = repository.insertPerson(Person(firstName = "پرهام", lastName = "علوی", gender = "Male", birthDate = "1401-02-10", birthPlace = "تهران", isDeceased = false, occupation = "کودک", generation = 6, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g5_brother, personId2 = g6_child1, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g5_cousin_f, personId2 = g6_child1, type = "Parent-Child"))
+            val g6_child1 = repository!!.insertPerson(Person(firstName = "پرهام", lastName = "علوی", gender = "Male", birthDate = "1401-02-10", birthPlace = "تهران", isDeceased = false, occupation = "کودک", generation = 6, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g5_brother, personId2 = g6_child1, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g5_cousin_f, personId2 = g6_child1, type = "Parent-Child"))
 
             // ازدواج فامیلی ۲: دختر دایی و پسر عمه (سارا علوی و امیر صابری)
-            repository.insertRelationship(Relationship(personId1 = g5d, personId2 = g5_cousin_m, type = "Spouse"))
+            repository!!.insertRelationship(Relationship(personId1 = g5d, personId2 = g5_cousin_m, type = "Spouse"))
 
             // فرزند ازدواج فامیلی ۲
-            val g6_child2 = repository.insertPerson(Person(firstName = "نیکا", lastName = "صابری", gender = "Female", birthDate = "1399-10-25", birthPlace = "تهران", isDeceased = false, occupation = "کودک", generation = 6, groupId = defaultGroupId))
-            repository.insertRelationship(Relationship(personId1 = g5_cousin_m, personId2 = g6_child2, type = "Parent-Child"))
-            repository.insertRelationship(Relationship(personId1 = g5d, personId2 = g6_child2, type = "Parent-Child"))
+            val g6_child2 = repository!!.insertPerson(Person(firstName = "نیکا", lastName = "صابری", gender = "Female", birthDate = "1399-10-25", birthPlace = "تهران", isDeceased = false, occupation = "کودک", generation = 6, groupId = defaultGroupId))
+            repository!!.insertRelationship(Relationship(personId1 = g5_cousin_m, personId2 = g6_child2, type = "Parent-Child"))
+            repository!!.insertRelationship(Relationship(personId1 = g5d, personId2 = g6_child2, type = "Parent-Child"))
         }
     }
 
     fun addPerson(person: Person, onComplete: (Long) -> Unit = {}) {
         viewModelScope.launch {
-            val id = repository.insertPerson(person)
+            val id = repository!!.insertPerson(person)
             onComplete(id)
         }
     }
@@ -265,7 +280,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val maxOrder = allGroups.value.map { it.displayOrder }.maxOrNull() ?: 0
             val groupWithOrder = group.copy(displayOrder = maxOrder + 1)
-            val id = repository.insertGroup(groupWithOrder)
+            val id = repository!!.insertGroup(groupWithOrder)
             onComplete(id)
         }
     }
@@ -273,14 +288,14 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     fun updateGroupOrder(orderedGroups: List<com.example.data.FamilyGroup>) {
         viewModelScope.launch {
             orderedGroups.forEachIndexed { index, group ->
-                repository.updateGroup(group.copy(displayOrder = index))
+                repository!!.updateGroup(group.copy(displayOrder = index))
             }
         }
     }
 
     fun updateGroup(group: com.example.data.FamilyGroup) {
         viewModelScope.launch {
-            repository.updateGroup(group)
+            repository!!.updateGroup(group)
         }
     }
 
@@ -289,7 +304,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
             if (_selectedGroupId.value == group.id) {
                 _selectedGroupId.value = null
             }
-            repository.deleteGroup(group)
+            repository!!.deleteGroup(group)
         }
     }
 
@@ -342,16 +357,16 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
 
             if (father != null) {
                 val f = father.copy(generation = parentGen)
-                fatherId = repository.insertPerson(f)
-                repository.insertRelationship(Relationship(personId1 = fatherId, personId2 = child.id, type = "Parent-Child"))
+                fatherId = repository!!.insertPerson(f)
+                repository!!.insertRelationship(Relationship(personId1 = fatherId, personId2 = child.id, type = "Parent-Child"))
             } else {
                 fatherId = existingFatherId
             }
 
             if (mother != null) {
                 val m = mother.copy(generation = parentGen)
-                motherId = repository.insertPerson(m)
-                repository.insertRelationship(Relationship(personId1 = motherId, personId2 = child.id, type = "Parent-Child"))
+                motherId = repository!!.insertPerson(m)
+                repository!!.insertRelationship(Relationship(personId1 = motherId, personId2 = child.id, type = "Parent-Child"))
             } else {
                 motherId = existingMotherId
             }
@@ -364,7 +379,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                      (rel.personId1 == motherId && rel.personId2 == fatherId))
                 }
                 if (!alreadySpouses) {
-                    repository.insertRelationship(Relationship(personId1 = fatherId, personId2 = motherId, type = "Spouse"))
+                    repository!!.insertRelationship(Relationship(personId1 = fatherId, personId2 = motherId, type = "Spouse"))
                 }
             }
 
@@ -375,11 +390,11 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     fun addChildToParent(parent: Person, child: Person, selectedSpouseId: Long? = null, onComplete: (Long) -> Unit = {}) {
         viewModelScope.launch {
             val childWithGen = child.copy(generation = parent.generation + 1)
-            val childId = repository.insertPerson(childWithGen)
-            repository.insertRelationship(Relationship(personId1 = parent.id, personId2 = childId, type = "Parent-Child"))
+            val childId = repository!!.insertPerson(childWithGen)
+            repository!!.insertRelationship(Relationship(personId1 = parent.id, personId2 = childId, type = "Parent-Child"))
             
             if (selectedSpouseId != null) {
-                repository.insertRelationship(Relationship(personId1 = selectedSpouseId, personId2 = childId, type = "Parent-Child"))
+                repository!!.insertRelationship(Relationship(personId1 = selectedSpouseId, personId2 = childId, type = "Parent-Child"))
             } else {
                 // If no specific spouse is chosen, find all spouses.
                 // If there's exactly one spouse, automatically link to that one spouse.
@@ -390,7 +405,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 }.distinct()
                 
                 if (spouses.size == 1) {
-                    repository.insertRelationship(Relationship(personId1 = spouses[0], personId2 = childId, type = "Parent-Child"))
+                    repository!!.insertRelationship(Relationship(personId1 = spouses[0], personId2 = childId, type = "Parent-Child"))
                 }
             }
 
@@ -401,15 +416,15 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     
     fun linkExistingSpouse(personId1: Long, personId2: Long, relationshipType: String = "Spouse") {
         viewModelScope.launch {
-            repository.insertRelationship(Relationship(personId1 = personId1, personId2 = personId2, type = relationshipType))
+            repository!!.insertRelationship(Relationship(personId1 = personId1, personId2 = personId2, type = relationshipType))
         }
     }
 
     fun addSpouseToPerson(spouseOf: Person, spouse: Person, relationshipType: String = "Spouse", onComplete: (Long) -> Unit = {}) {
         viewModelScope.launch {
             val spouseWithGen = spouse.copy(generation = spouseOf.generation)
-            val spouseId = repository.insertPerson(spouseWithGen)
-            repository.insertRelationship(Relationship(personId1 = spouseOf.id, personId2 = spouseId, type = relationshipType))
+            val spouseId = repository!!.insertPerson(spouseWithGen)
+            repository!!.insertRelationship(Relationship(personId1 = spouseOf.id, personId2 = spouseId, type = relationshipType))
             
             // Automatically find children of spouseOf and link them to the new spouse too
             val children = allRelationships.value.filter { rel ->
@@ -421,7 +436,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     rel.personId1 == spouseId && rel.personId2 == childRel.personId2
                 }
                 if (!exists) {
-                    repository.insertRelationship(Relationship(personId1 = spouseId, personId2 = childRel.personId2, type = childRel.type))
+                    repository!!.insertRelationship(Relationship(personId1 = spouseId, personId2 = childRel.personId2, type = childRel.type))
                 }
             }
 
@@ -431,13 +446,13 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
 
     fun updatePerson(person: Person) {
         viewModelScope.launch {
-            repository.updatePerson(person)
+            repository!!.updatePerson(person)
         }
     }
 
     fun deletePerson(person: Person) {
         viewModelScope.launch {
-            repository.deletePerson(person)
+            repository!!.deletePerson(person)
             if (_focusPersonId.value == person.id) {
                 _focusPersonId.value = null
             }
@@ -461,7 +476,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 (it.personId1 == personId2 && it.personId2 == personId1 && it.type == type)
             }
             if (!existing) {
-                repository.insertRelationship(Relationship(personId1 = personId1, personId2 = personId2, type = type))
+                repository!!.insertRelationship(Relationship(personId1 = personId1, personId2 = personId2, type = type))
             }
 
             // If the added relationship is Spouse/Divorced, automatically sync children between spouses!
@@ -476,7 +491,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         rel.personId1 == personId2 && rel.personId2 == childRel.personId2
                     }
                     if (!childExists) {
-                        repository.insertRelationship(Relationship(personId1 = personId2, personId2 = childRel.personId2, type = childRel.type))
+                        repository!!.insertRelationship(Relationship(personId1 = personId2, personId2 = childRel.personId2, type = childRel.type))
                     }
                 }
                 
@@ -490,7 +505,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         rel.personId1 == personId1 && rel.personId2 == childRel.personId2
                     }
                     if (!childExists) {
-                        repository.insertRelationship(Relationship(personId1 = personId1, personId2 = childRel.personId2, type = childRel.type))
+                        repository!!.insertRelationship(Relationship(personId1 = personId1, personId2 = childRel.personId2, type = childRel.type))
                     }
                 }
             }
@@ -509,7 +524,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         rel.personId1 == spouseId && rel.personId2 == personId2
                     }
                     if (!exists) {
-                        repository.insertRelationship(Relationship(personId1 = spouseId, personId2 = personId2, type = type))
+                        repository!!.insertRelationship(Relationship(personId1 = spouseId, personId2 = personId2, type = type))
                     }
                 }
             }
@@ -518,7 +533,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
 
     fun deleteRelationship(relationship: Relationship) {
         viewModelScope.launch {
-            repository.deleteRelationship(relationship)
+            repository!!.deleteRelationship(relationship)
         }
     }
 
@@ -917,7 +932,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     val name = gObj.getString("name")
                     val description = if (gObj.isNull("description")) null else gObj.getString("description")
                     
-                    val newId = repository.insertGroup(com.example.data.FamilyGroup(id = 0, name = name, description = description))
+                    val newId = repository!!.insertGroup(com.example.data.FamilyGroup(id = 0, name = name, description = description))
                     oldToNewGroupIdMap[oldId] = newId
                 }
                 
@@ -966,7 +981,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         restoredPhotoUri = originalPhotoUri
                     }
                     
-                    val newPersonId = repository.insertPerson(
+                    val newPersonId = repository!!.insertPerson(
                         com.example.data.Person(
                             id = 0,
                             firstName = firstName,
@@ -997,7 +1012,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     val newP2 = oldToNewPersonIdMap[oldP2]
                     
                     if (newP1 != null && newP2 != null) {
-                        repository.insertRelationship(
+                        repository!!.insertRelationship(
                             com.example.data.Relationship(
                                 id = 0,
                                 personId1 = newP1,
@@ -1140,7 +1155,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 
                 // Create a new group
                 val newGroupName = "شجره‌نامه بازگردانی شده ($rootPersonName)"
-                val newGroupId = repository.insertGroup(com.example.data.FamilyGroup(name = newGroupName, description = "بازگردانی شده از بکاپ عضو"))
+                val newGroupId = repository!!.insertGroup(com.example.data.FamilyGroup(name = newGroupName, description = "بازگردانی شده از بکاپ عضو"))
                 
                 // Map to store old person ID to new person ID mappings
                 val oldToNewIdMap = mutableMapOf<Long, Long>()
@@ -1195,7 +1210,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         restoredPhotoUri = originalPhotoUri
                     }
  
-                    val newPersonId = repository.insertPerson(
+                    val newPersonId = repository!!.insertPerson(
                         com.example.data.Person(
                             id = 0, // Let Room auto-generate a new ID
                             firstName = firstName,
@@ -1226,7 +1241,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     val newP2 = oldToNewIdMap[oldP2]
                     
                     if (newP1 != null && newP2 != null) {
-                        repository.insertRelationship(
+                        repository!!.insertRelationship(
                             com.example.data.Relationship(
                                 id = 0, // Auto-generate
                                 personId1 = newP1,

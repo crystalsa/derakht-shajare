@@ -16,3 +16,10 @@
 local.properties
 .env
 debug.keystore
+
+# Scratch scripts
+*.py
+*.sh
+test_*.kt
+patch_*.kt
+fix_*.kt

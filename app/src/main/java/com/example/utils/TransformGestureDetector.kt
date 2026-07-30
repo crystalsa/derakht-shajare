@@ -1,3 +1,5 @@
+package com.example.utils
+
 /*
  * Copyright 2020 The Android Open Source Project
  *
@@ -14,16 +16,21 @@
  * limitations under the License.
  */
 
-package androidx.compose.foundation.gestures
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerInputChange
+
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculateCentroidSize
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateRotation
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.positionChanged
-import androidx.compose.ui.util.fastAny
-import androidx.compose.ui.util.fastForEach
-import androidx.compose.ui.util.fastSumBy
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -60,7 +67,7 @@ public suspend fun PointerInputScope.detectTransformGestures(
         awaitFirstDown(requireUnconsumed = false)
         do {
             val event = awaitPointerEvent()
-            val canceled = event.changes.fastAny { it.isConsumed }
+            val canceled = false // event.changes.any { it.isConsumed }
             if (!canceled) {
                 val zoomChange = event.calculateZoom()
                 val rotationChange = event.calculateRotation()
@@ -92,14 +99,14 @@ public suspend fun PointerInputScope.detectTransformGestures(
                     if (effectiveRotation != 0f || zoomChange != 1f || panChange != Offset.Zero) {
                         onGesture(centroid, panChange, zoomChange, effectiveRotation)
                     }
-                    event.changes.fastForEach {
+                    event.changes.forEach {
                         if (it.positionChanged()) {
                             it.consume()
                         }
                     }
                 }
             }
-        } while (!canceled && event.changes.fastAny { it.pressed })
+        } while (!canceled && event.changes.any { it.pressed })
     }
 }
 
@@ -113,7 +120,7 @@ public suspend fun PointerInputScope.detectTransformGestures(
  * @sample androidx.compose.foundation.samples.CalculateRotation
  */
 public fun PointerEvent.calculateRotation(): Float {
-    val pointerCount = changes.fastSumBy { if (it.previousPressed && it.pressed) 1 else 0 }
+    val pointerCount = changes.count { it.previousPressed && it.pressed }
     if (pointerCount < 2) {
         return 0f
     }
@@ -128,7 +135,7 @@ public fun PointerEvent.calculateRotation(): Float {
     // change, and we don't want it to affect the rotation as much as pointers farther
     // from the centroid, which should be more stable.
 
-    changes.fastForEach { change ->
+    changes.forEach { change ->
         if (change.pressed && change.previousPressed) {
             val currentPosition = change.position
             val previousPosition = change.previousPosition
@@ -214,7 +221,7 @@ public fun PointerEvent.calculateCentroidSize(useCurrent: Boolean = true): Float
 
     var distanceToCentroid = 0f
     var distanceWeight = 0
-    changes.fastForEach { change ->
+    changes.forEach { change ->
         if (change.pressed && change.previousPressed) {
             val position = if (useCurrent) change.position else change.previousPosition
             distanceToCentroid += (position - centroid).getDistance()
@@ -253,7 +260,7 @@ internal fun PointerEvent.calculateCentroid(
     var centroid = Offset.Zero
     var centroidWeight = 0
 
-    changes.fastForEach { change ->
+    changes.forEach { change ->
         if (pointerInputChangeMatcher(change)) {
             val position = if (useCurrent) change.position else change.previousPosition
             centroid += position
