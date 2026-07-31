@@ -16,6 +16,7 @@ import java.util.*
 class FamilyViewModel(application: Application) : AndroidViewModel(application) {
 
     private var repository: FamilyRepository? = null
+    private var collectJob: kotlinx.coroutines.Job? = null
     
     private val _allPersons = MutableStateFlow<List<Person>>(emptyList())
     val allPersons = _allPersons.asStateFlow()
@@ -75,7 +76,8 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun initDatabase() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        collectJob?.cancel()
+        collectJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val database = FamilyDatabase.getDatabase(getApplication())
                 val repo = FamilyRepository(database.familyDao())
@@ -113,6 +115,10 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
             val backupFile = java.io.File(dbFile.path + ".bak")
             if (backupFile.exists()) {
                 try {
+                    FamilyDatabase.closeAndClearInstance()
+                    java.io.File(dbFile.path + "-wal").delete()
+                    java.io.File(dbFile.path + "-shm").delete()
+                    
                     backupFile.copyTo(dbFile, overwrite = true)
                     initDatabase()
                     launch(kotlinx.coroutines.Dispatchers.Main) { onComplete(true) }
@@ -370,7 +376,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         glowJob?.cancel()
         if (id != null) {
             glowJob = viewModelScope.launch {
-            val repo = repository ?: return@launch
+                val repo = repository ?: return@launch
                 kotlinx.coroutines.delay(5000)
                 if (_glowPersonId.value == id) {
                     _glowPersonId.value = null
