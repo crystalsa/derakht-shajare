@@ -101,6 +101,30 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         initDatabase()
     }
 
+    fun hasDatabaseBackup(): Boolean {
+        val dbFile = getApplication<Application>().getDatabasePath("family_tree_database")
+        return java.io.File(dbFile.path + ".bak").exists()
+    }
+
+    fun restoreDatabaseBackup(onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val dbFile = context.getDatabasePath("family_tree_database")
+            val backupFile = java.io.File(dbFile.path + ".bak")
+            if (backupFile.exists()) {
+                try {
+                    backupFile.copyTo(dbFile, overwrite = true)
+                    initDatabase()
+                    launch(kotlinx.coroutines.Dispatchers.Main) { onComplete(true) }
+                } catch (e: Exception) {
+                    launch(kotlinx.coroutines.Dispatchers.Main) { onComplete(false) }
+                }
+            } else {
+                launch(kotlinx.coroutines.Dispatchers.Main) { onComplete(false) }
+            }
+        }
+    }
+
     data class FilterState(
         val query: String,
         val gender: String?,

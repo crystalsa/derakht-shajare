@@ -17,6 +17,13 @@ abstract class FamilyDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: FamilyDatabase? = null
 
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `family_groups` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `description` TEXT)")
+                db.execSQL("ALTER TABLE `persons` ADD COLUMN `groupId` INTEGER")
+            }
+        }
+
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `family_groups` ADD COLUMN `displayOrder` INTEGER NOT NULL DEFAULT 0")
@@ -57,7 +64,7 @@ abstract class FamilyDatabase : RoomDatabase() {
                 FamilyDatabase::class.java,
                 "family_tree_database"
             )
-            .addMigrations(MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .build()
         }
     }

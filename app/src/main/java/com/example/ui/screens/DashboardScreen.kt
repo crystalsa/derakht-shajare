@@ -458,6 +458,22 @@ $databaseError
                                 onClick = { showRestoreDialog = true; showSettingsMenu = false },
                                 leadingIcon = { Icon(Icons.Default.Publish, contentDescription = null, tint = accentColor) }
                             )
+                            if (viewModel.hasDatabaseBackup()) {
+                                DropdownMenuItem(
+                                    text = { Text("بازگردانی پایگاه داده آسیب‌دیده", color = Color.Red) },
+                                    onClick = {
+                                        showSettingsMenu = false
+                                        viewModel.restoreDatabaseBackup { success ->
+                                            if (success) {
+                                                Toast.makeText(context, "پایگاه داده با موفقیت بازگردانی شد.", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                Toast.makeText(context, "بازگردانی با شکست مواجه شد.", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Warning, contentDescription = null, tint = Color.Red) }
+                                )
+                            }
                             
                             Divider(modifier = Modifier.padding(vertical = 4.dp))
                             
