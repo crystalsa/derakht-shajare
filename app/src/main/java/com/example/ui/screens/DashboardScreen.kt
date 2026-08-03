@@ -15,6 +15,15 @@ import android.content.Context
 import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.draw.drawWithContent
+import com.example.utils.TreePdfExporter
+import com.example.utils.AppLogger
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -78,6 +87,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import kotlin.math.roundToInt
@@ -188,6 +198,7 @@ data class TreePos(val x: Float, val y: Float)
 @Composable
 fun DashboardScreen(viewModel: FamilyViewModel) {
     val context = LocalContext.current
+    val density = LocalDensity.current.density
     val persons by viewModel.filteredPersons.collectAsStateWithLifecycle()
     val allPersonsRaw by viewModel.allPersons.collectAsStateWithLifecycle()
     val relationships by viewModel.allRelationships.collectAsStateWithLifecycle()
@@ -207,6 +218,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     // Group & Spouse states
     val allGroups by viewModel.allGroups.collectAsStateWithLifecycle()
     val selectedGroupId by viewModel.selectedGroupId.collectAsStateWithLifecycle()
+    var isExportingPdf by remember { mutableStateOf(false) }
 
     // Group Drag-Reorder states
     var draggingGroupIndex by remember { mutableStateOf<Int?>(null) }
@@ -240,6 +252,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     var showCalculatorDialog by remember { mutableStateOf(false) }
     var showBackupDialog by remember { mutableStateOf(false) }
     var showRestoreDialog by remember { mutableStateOf(false) }
+    var showLogsDialog by remember { mutableStateOf(false) }
     var tempExportGroupId by remember { mutableStateOf<Long?>(null) }
     var backupFileNameInput by remember { mutableStateOf("بکاپ_کامل_خاندان") }
     var backupJsonToSave by remember { mutableStateOf("") }
@@ -437,6 +450,11 @@ $databaseError
                                 text = { Text("یادآورها و رویدادها (${upcomingEvents.size})", color = textColor) },
                                 onClick = { showRemindersDialog = true; showSettingsMenu = false },
                                 leadingIcon = { Icon(Icons.Default.Notifications, contentDescription = null, tint = accentColor) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("خروجی PDF", color = textColor) },
+                                onClick = { showSettingsMenu = false; isExportingPdf = true },
+                                leadingIcon = { Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = accentColor) }
                             )
                             DropdownMenuItem(
                                 text = { Text("بارگذاری اطلاعات نمونه", color = textColor) },
@@ -3405,7 +3423,246 @@ $databaseError
             containerColor = Color.White
         )
     }
+
+    if (isExportingPdf) {
+        val graphicsLayer = rememberGraphicsLayer()
+
+        val groupName = remember(allGroups, selectedGroupId) {
+            allGroups.find { it.id == selectedGroupId }?.name ?: "خاندان عمومی"
+        }
+
+        val exportPersons = remember(allPersonsRaw, selectedGroupId) {
+            if (selectedGroupId != null) allPersonsRaw.filter { it.groupId == selectedGroupId } else allPersonsRaw
+        }
+
+        val pdfPositions = remember(exportPersons, relationships, currentLayout, focusPersonId, expandedGhostParents) {
+            computeTreeLayoutPositions(exportPersons, relationships, currentLayout, focusPersonId, expandedGhostParents)
+        }
+
+        val exportDensity = remember(pdfPositions, density) {
+            if (pdfPositions.isEmpty()) density
+            else {
+                var minX = Float.MAX_VALUE
+                var minY = Float.MAX_VALUE
+                var maxX = -Float.MAX_VALUE
+                var maxY = -Float.MAX_VALUE
+
+                for (pos in pdfPositions.values) {
+                    if (pos.x < minX) minX = pos.x
+                    if (pos.y < minY) minY = pos.y
+                    if (pos.x > maxX) maxX = pos.x
+                    if (pos.y > maxY) maxY = pos.y
+                }
+
+                val maxAbsX = maxOf(kotlin.math.abs(minX), kotlin.math.abs(maxX))
+                val maxAbsY = maxOf(kotlin.math.abs(minY), kotlin.math.abs(maxY))
+                val widthDp = 2f * maxAbsX + 340f
+                val heightDp = 2f * maxAbsY + 380f
+                val maxSpanDp = maxOf(widthDp, heightDp)
+
+                val targetMaxPx = 3600f
+                val calculatedDensity = targetMaxPx / maxSpanDp
+                minOf(density, calculatedDensity).coerceAtLeast(0.8f)
+            }
+        }
+
+        val (pdfContentWidthDp, pdfContentHeightDp) = remember(pdfPositions) {
+            if (pdfPositions.isEmpty()) {
+                300.dp to 300.dp
+            } else {
+                var minX = Float.MAX_VALUE
+                var minY = Float.MAX_VALUE
+                var maxX = -Float.MAX_VALUE
+                var maxY = -Float.MAX_VALUE
+
+                for (pos in pdfPositions.values) {
+                    if (pos.x < minX) minX = pos.x
+                    if (pos.y < minY) minY = pos.y
+                    if (pos.x > maxX) maxX = pos.x
+                    if (pos.y > maxY) maxY = pos.y
+                }
+
+                val maxAbsX = maxOf(kotlin.math.abs(minX), kotlin.math.abs(maxX))
+                val maxAbsY = maxOf(kotlin.math.abs(minY), kotlin.math.abs(maxY))
+
+                val widthDp = (2f * maxAbsX + 340f).dp
+                val heightDp = (2f * maxAbsY + 380f).dp
+                widthDp to heightDp
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { /* Non-dismissable while exporting */ },
+            confirmButton = {},
+            title = { Text("در حال آماده‌سازی فایل PDF...", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = accentColor) },
+            text = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(8.dp)
+                ) {
+                    CircularProgressIndicator(color = accentColor)
+                    Text("لطفاً شکیبا باشید. شجره‌نامه $groupName با کیفیت بالا در حال رندر است...", fontSize = 13.sp, color = textColor)
+                }
+            },
+            containerColor = Color.White
+        )
+
+        Box(
+            modifier = Modifier.size(1.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .requiredSize(pdfContentWidthDp, pdfContentHeightDp)
+                    .drawWithContent {
+                        graphicsLayer.record {
+                            this@drawWithContent.drawContent()
+                        }
+                        drawLayer(graphicsLayer)
+                    }
+            ) {
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density = exportDensity, fontScale = 1.0f)
+                ) {
+                    FamilyTreeContent(
+                        persons = exportPersons,
+                        relationships = relationships,
+                        positions = pdfPositions,
+                        layoutType = currentLayout,
+                        accentColor = accentColor,
+                        cardBgColor = cardColor,
+                        textColor = textColor,
+                        density = exportDensity,
+                        glowPersonId = null,
+                        highlightedPathIds = emptySet(),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+
+        LaunchedEffect(pdfPositions) {
+            try {
+                AppLogger.i("PDF_EXPORT", "شروع فرایند تولید PDF برای خاندان: $groupName")
+                kotlinx.coroutines.delay(600)
+                val imageBitmap = graphicsLayer.toImageBitmap()
+                val bitmap = imageBitmap.asAndroidBitmap()
+                AppLogger.i("PDF_EXPORT", "تصویر شجره‌نامه رندر شد. ابعاد: ${bitmap.width}x${bitmap.height}, کانفیگ: ${bitmap.config}")
+
+                val file = TreePdfExporter.saveBitmapToPdf(context, bitmap, groupName)
+                isExportingPdf = false
+                TreePdfExporter.shareTreePdf(context, file)
+            } catch (e: Throwable) {
+                AppLogger.e("PDF_EXPORT", "خطا در فرایند تولید یا اشتراک‌گذاری PDF", e)
+                e.printStackTrace()
+                isExportingPdf = false
+                val msg = e.localizedMessage ?: "خطا در تولید فایل PDF"
+                Toast.makeText(context, "خطا در تولید PDF: $msg", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    if (showLogsDialog) {
+        AppLogsDialog(
+            accentColor = accentColor,
+            textColor = textColor,
+            onDismiss = { showLogsDialog = false }
+        )
+    }
 }
+}
+
+@Composable
+fun AppLogsDialog(
+    accentColor: Color,
+    textColor: Color,
+    onDismiss: () -> Unit
+) {
+    val logs by AppLogger.logs.collectAsStateWithLifecycle()
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Terminal, contentDescription = null, tint = accentColor)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("لاگ‌های برنامه", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = accentColor)
+                }
+                Text("${logs.size} لاگ", fontSize = 12.sp, color = Color.Gray)
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().height(360.dp)) {
+                if (logs.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("هیچ لاگی هنوز ثبت نشده است.", color = Color.Gray, fontSize = 13.sp)
+                    }
+                } else {
+                    val listState = rememberLazyListState()
+                    LaunchedEffect(logs.size) {
+                        if (logs.isNotEmpty()) {
+                            listState.animateScrollToItem(logs.size - 1)
+                        }
+                    }
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFF1E1E1E), RoundedCornerShape(8.dp))
+                                .padding(8.dp)
+                        ) {
+                            items(logs) { entry ->
+                                Text(
+                                    text = entry,
+                                    color = if (entry.contains("[ERROR]")) Color(0xFFFF6B6B) else Color(0xFFE0E0E0),
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val allText = AppLogger.getAllLogsText()
+                    if (allText.isNotEmpty()) {
+                        clipboardManager.setText(AnnotatedString(allText))
+                        Toast.makeText(context, "لاگ‌ها کپی شدند", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+            ) {
+                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("کپی لاگ‌ها", fontSize = 12.sp)
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { AppLogger.clear() }
+                ) {
+                    Text("پاک‌سازی", fontSize = 12.sp)
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("بستن", fontSize = 12.sp)
+                }
+            }
+        },
+        containerColor = Color.White
+    )
 }
 
 @Composable
@@ -3655,42 +3912,141 @@ fun InteractiveFamilyTree(
                     translationY = animatableOffset.value.y
                 )
         ) {
-            // Draw connection lines on bottom layer
-            Canvas(
+            FamilyTreeContent(
+                persons = persons,
+                relationships = relationships,
+                positions = positions,
+                layoutType = layoutType,
+                accentColor = accentColor,
+                cardBgColor = cardBgColor,
+                textColor = textColor,
+                density = density,
+                glowPersonId = glowPersonId,
+                highlightedPathIds = highlightedPathIds,
+                onViewFamilyClick = onViewFamilyClick,
+                onPersonClick = onPersonClick,
+                onPersonDoubleTap = onPersonDoubleTap,
+                onPhotoClick = onPhotoClick,
+                onPanToPerson = onPanToPerson,
                 modifier = Modifier.fillMaxSize()
-            ) {
-                // Draw lines between spouses and child relations
-                for (rel in relationships) {
-                    val isSpouse = isSpouseRelation(rel.type)
-                    
-                    val pairsToDraw = mutableListOf<Pair<String, String>>()
-                    if (isSpouse) {
-                        val p1 = rel.personId1.toString()
-                        val p2 = rel.personId2.toString()
-                        val s1 = "shadow_${rel.personId1}_${rel.personId2}"
-                        val s2 = "shadow_${rel.personId2}_${rel.personId1}"
-                        
-                        var drawn = false
-                        if (positions.containsKey(p1) && positions.containsKey(s2)) {
-                            pairsToDraw.add(p1 to s2)
-                            drawn = true
-                        }
-                        if (positions.containsKey(p2) && positions.containsKey(s1)) {
-                            pairsToDraw.add(p2 to s1)
-                            drawn = true
-                        }
-                        if (!drawn && positions.containsKey(p1) && positions.containsKey(p2)) {
-                            pairsToDraw.add(p1 to p2)
-                        }
-                    } else {
-                        pairsToDraw.add(rel.personId1.toString() to rel.personId2.toString())
-                        
-                    }
+            )
+        }
+    }
+}
 
-                    for ((pos1Str, pos2Str) in pairsToDraw) {
-                        val pos1 = positions[pos1Str]
-                        val pos2 = positions[pos2Str]
-                        if (pos1 != null && pos2 != null) {
+@Composable
+fun FamilyTreeContent(
+    persons: List<Person>,
+    relationships: List<Relationship>,
+    positions: Map<String, TreePos>,
+    layoutType: String,
+    accentColor: Color,
+    cardBgColor: Color,
+    textColor: Color,
+    density: Float,
+    glowPersonId: Long? = null,
+    highlightedPathIds: Set<Long> = emptySet(),
+    onViewFamilyClick: (Person) -> Unit = {},
+    onPersonClick: (Person) -> Unit = {},
+    onPersonDoubleTap: (Person) -> Unit = {},
+    onPhotoClick: (Person) -> Unit = {},
+    onPanToPerson: (Person) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val childParentsMap = remember(relationships) {
+        val map = mutableMapOf<Long, MutableList<Long>>()
+        for (rel in relationships) {
+            if (rel.type == "Parent-Child") {
+                map.getOrPut(rel.personId2) { mutableListOf() }.add(rel.personId1)
+            }
+        }
+        map
+    }
+
+    val isSpouseMap = remember(relationships) {
+        val set = mutableSetOf<String>()
+        for (rel in relationships) {
+            if (isSpouseRelation(rel.type)) {
+                val minId = minOf(rel.personId1, rel.personId2)
+                val maxId = maxOf(rel.personId1, rel.personId2)
+                set.add("$minId-$maxId")
+            }
+        }
+        set
+    }
+
+    val spouseMapForHeart = remember(persons, relationships) {
+        val map = mutableMapOf<Long, Color>()
+        val spousePairs = mutableListOf<Pair<Long, Long>>()
+        
+        for (rel in relationships) {
+            if (isSpouseRelation(rel.type)) {
+                val minId = minOf(rel.personId1, rel.personId2)
+                val maxId = maxOf(rel.personId1, rel.personId2)
+                if (spousePairs.none { it.first == minId && it.second == maxId }) {
+                    spousePairs.add(minId to maxId)
+                }
+            }
+        }
+        
+        val heartColors = listOf(
+            0xFFE91E63, 0xFF3F51B5, 0xFF4CAF50, 0xFFFF9800, 0xFF9C27B0, 0xFF00BCD4, 0xFFFFEB3B, 0xFF795548,
+            0xFFF44336, 0xFF2196F3, 0xFF8BC34A, 0xFFFF5722, 0xFF673AB7, 0xFF009688, 0xFFFFC107, 0xFF607D8B,
+            0xFFE040FB, 0xFF03A9F4, 0xFFCDDC39, 0xFFFF7043, 0xFF512DA8, 0xFF00796B, 0xFFFBC02D, 0xFF5D4037,
+            0xFFC2185B, 0xFF1976D2, 0xFF689F38, 0xFFE64A19, 0xFF7B1FA2, 0xFF0097A7, 0xFFF57C00, 0xFF455A64,
+            0xFFD81B60, 0xFF0288D1, 0xFF9CCC65, 0xFFF4511E, 0xFF303F9F, 0xFF26A69A, 0xFFFFCA28, 0xFF8D6E63,
+            0xFFAD1457, 0xFF1565C0, 0xFF558B2F, 0xFFD84315, 0xFF4527A0, 0xFF00838F, 0xFFF39C12, 0xFF37474F,
+            0xFFEC407A, 0xFF29B6F6, 0xFF7CB342, 0xFFFF8A65, 0xFF5E35B1, 0xFF26C6DA, 0xFFFFD54F, 0xFF6D4C41,
+            0xFF880E4F, 0xFF0D47A1, 0xFF33691E, 0xFFBF360C, 0xFF311B92, 0xFF006064, 0xFFE67E22, 0xFF263238
+        ).map { Color(it) }
+        
+        val random = kotlin.random.Random(42)
+        val shuffledColors = heartColors.shuffled(random)
+        
+        spousePairs.forEachIndexed { index, pair ->
+            val color = shuffledColors[index % shuffledColors.size]
+            map[pair.first] = color
+            map[pair.second] = color
+        }
+        map
+    }
+
+    Box(modifier = modifier) {
+        // Draw connection lines on bottom layer
+        Canvas(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // Draw lines between spouses and child relations
+            for (rel in relationships) {
+                val isSpouse = isSpouseRelation(rel.type)
+                
+                val pairsToDraw = mutableListOf<Pair<String, String>>()
+                if (isSpouse) {
+                    val p1 = rel.personId1.toString()
+                    val p2 = rel.personId2.toString()
+                    val s1 = "shadow_${rel.personId1}_${rel.personId2}"
+                    val s2 = "shadow_${rel.personId2}_${rel.personId1}"
+                    
+                    var drawn = false
+                    if (positions.containsKey(p1) && positions.containsKey(s2)) {
+                        pairsToDraw.add(p1 to s2)
+                        drawn = true
+                    }
+                    if (positions.containsKey(p2) && positions.containsKey(s1)) {
+                        pairsToDraw.add(p2 to s1)
+                        drawn = true
+                    }
+                    if (!drawn && positions.containsKey(p1) && positions.containsKey(p2)) {
+                        pairsToDraw.add(p1 to p2)
+                    }
+                } else {
+                    pairsToDraw.add(rel.personId1.toString() to rel.personId2.toString())
+                }
+
+                for ((pos1Str, pos2Str) in pairsToDraw) {
+                    val pos1 = positions[pos1Str]
+                    val pos2 = positions[pos2Str]
+                    if (pos1 != null && pos2 != null) {
                         val p1Offset = Offset(
                             x = pos1.x * density + size.width / 2,
                             y = pos1.y * density + size.height / 2
@@ -3705,30 +4061,28 @@ fun InteractiveFamilyTree(
 
                         val strokeWidth = if (isHighlightedConnection) 5.dp.toPx() else 2.5.dp.toPx()
                         
-                        // Deterministic random line color per family/relationship to distinguish families
                         val lineColors = listOf(
-                            Color(0xFF2E7D32), // Green
-                            Color(0xFF1565C0), // Blue
-                            Color(0xFFC2185B), // Pink/Red
-                            Color(0xFF8E24AA), // Purple
-                            Color(0xFFE65100), // Orange/Amber
-                            Color(0xFF00838F), // Cyan
-                            Color(0xFF00695C), // Teal
-                            Color(0xFFD84315), // Deep Orange
-                            Color(0xFF6D4C41), // Brown
-                            Color(0xFF455A64)  // Blue Grey
+                            Color(0xFF2E7D32),
+                            Color(0xFF1565C0),
+                            Color(0xFFC2185B),
+                            Color(0xFF8E24AA),
+                            Color(0xFFE65100),
+                            Color(0xFF00838F),
+                            Color(0xFF00695C),
+                            Color(0xFFD84315),
+                            Color(0xFF6D4C41),
+                            Color(0xFF455A64)
                         )
                         val colorSeed = if (isSpouseRelation(rel.type)) {
                             minOf(rel.personId1, rel.personId2)
                         } else {
-                            rel.personId1 // Parent ID for child relationship connections
+                            rel.personId1
                         }
                         val randomLineColor = lineColors[(colorSeed % lineColors.size).toInt()]
                         val drawColor = if (isHighlightedConnection) Color(0xFFD84315) else randomLineColor.copy(alpha = 0.9f)
 
                         when (rel.type) {
                             "Spouse", "SecondSpouse" -> {
-                                // Solid connection line between spouses
                                 drawLine(
                                     color = drawColor,
                                     start = p1Offset,
@@ -3738,7 +4092,6 @@ fun InteractiveFamilyTree(
                                 )
                             }
                             "Divorced", "SecondSpouse_Divorced" -> {
-                                // Dashed connection line between divorced
                                 drawLine(
                                     color = drawColor,
                                     start = p1Offset,
@@ -3752,7 +4105,6 @@ fun InteractiveFamilyTree(
                                 val childId = rel.personId2
                                 val parentId = rel.personId1
                                 
-                                // Skip drawing child line if parentId is a second spouse
                                 val isParentSecondSpouse = relationships.any { r ->
                                     isSecondSpouseRelation(r.type) && r.personId2 == parentId
                                 }
@@ -3837,51 +4189,49 @@ fun InteractiveFamilyTree(
                             }
                         }
                     }
-                    }
                 }
             }
+        }
 
-            // Render card nodes above lines
-            positions.forEach { (key, pos) ->
-                val isShadow = key.startsWith("shadow_")
+        // Render card nodes above lines
+        positions.forEach { (key, pos) ->
+            val isShadow = key.startsWith("shadow_")
+            
+            val personId = if (isShadow) {
+                key.split("_")[1].toLong()
+            } else {
+                key.toLong()
+            }
+            val person = persons.find { it.id == personId } ?: return@forEach
+
+            val cardXPx = pos.x * density
+            val cardYPx = pos.y * density
+
+            Box(
+                modifier = Modifier
+                    .absoluteOffset { IntOffset(cardXPx.roundToInt(), cardYPx.roundToInt()) }
+                    .padding(8.dp)
+                    .align(Alignment.Center)
+            ) {
+                val isPathHighlighted = highlightedPathIds.contains(person.id)
                 
-                val personId = if (isShadow) {
-                    key.split("_")[1].toLong()
-                } else {
-                    key.toLong()
-                }
-                val person = persons.find { it.id == personId } ?: return@forEach
-
-                val cardXPx = pos.x * density
-                val cardYPx = pos.y * density
-
-                Box(
-                    modifier = Modifier
-                        .absoluteOffset { IntOffset(cardXPx.roundToInt(), cardYPx.roundToInt()) }
-                        .padding(8.dp)
-                        .align(Alignment.Center)
-                ) {
-                    val isPathHighlighted = highlightedPathIds.contains(person.id)
-                    
-                    FamilyMemberNodeCard(
-                        person = person,
-                        isHighlighted = isPathHighlighted,
-                        accentColor = accentColor,
-                        cardBgColor = cardBgColor,
-                        textColor = textColor,
-                        spouseHeartColor = spouseMapForHeart[person.id],
-                        isShadow = isShadow,
-                        onFocusClick = { onViewFamilyClick(person) },
-                        onClick = { onPersonClick(person) },
-                        onDoubleTap = { onPersonDoubleTap(person) },
-                        onPhotoClick = onPhotoClick,
-                        glowPersonId = if (isShadow) null else glowPersonId,
-                        onEyeClick = {
-                            // On eye click (link icon on shadow card), we pan the view to the main card of this person
-                            onPanToPerson(person)
-                        }
-                    )
-                }
+                FamilyMemberNodeCard(
+                    person = person,
+                    isHighlighted = isPathHighlighted,
+                    accentColor = accentColor,
+                    cardBgColor = cardBgColor,
+                    textColor = textColor,
+                    spouseHeartColor = spouseMapForHeart[person.id],
+                    isShadow = isShadow,
+                    onFocusClick = { onViewFamilyClick(person) },
+                    onClick = { onPersonClick(person) },
+                    onDoubleTap = { onPersonDoubleTap(person) },
+                    onPhotoClick = onPhotoClick,
+                    glowPersonId = if (isShadow) null else glowPersonId,
+                    onEyeClick = {
+                        onPanToPerson(person)
+                    }
+                )
             }
         }
     }
@@ -6539,6 +6889,402 @@ fun AddRelationshipDialog(
 }
 
 // Dialog for detailed member view
+enum class ProfileExportIntent { DOWNLOAD, SHARE }
+
+@Composable
+fun PersonProfileContent(
+    person: Person,
+    relationships: List<Relationship>,
+    allPersons: List<Person>,
+    spouseList: List<Relationship>,
+    parentsList: List<Relationship>,
+    childrenList: List<Relationship>,
+    siblings: List<Person>,
+    textColor: Color,
+    dialogOrange: Color,
+    dialogAccentOrange: Color,
+    onRelativeClick: ((Long) -> Unit)? = null
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            "مشخصات فردی",
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            color = dialogAccentOrange
+        )
+        Divider(color = dialogAccentOrange.copy(alpha = 0.4f))
+
+        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Text("جنسیت:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
+            Text(if (person.gender == "Male") "مرد (آقا)" else "زن (خانم)", color = textColor, fontSize = 12.sp)
+        }
+
+        if (person.birthDate != null || person.isDeceased) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text(if (person.isDeceased) "تاریخ حیات:" else "تاریخ تولد:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
+                Text(formatLifeDates(person.birthDate, person.deathDate, person.isDeceased, getCurrentJalaliYear()).toFarsiNumbers(), color = textColor, fontSize = 12.sp)
+            }
+        }
+
+        if (person.birthPlace != null) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text("محل زندگی / تولد:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
+                Text(person.birthPlace, color = textColor, fontSize = 12.sp)
+            }
+        }
+
+        if (person.isDeceased) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.DarkGray.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                    .padding(8.dp)
+            ) {
+                Column {
+                    Text("وضعیت: متوفی (مرحوم)", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+
+                    if (person.deathPlace != null) {
+                        Text("محل فوت: ${person.deathPlace}", color = textColor, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        if (person.occupation != null) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text("شغل / پیشه:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
+                Text(person.occupation, color = textColor, fontSize = 12.sp)
+            }
+        }
+
+        if (person.biography != null) {
+            Column {
+                Text("بیوگرافی / یادداشت:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
+                Text(
+                    person.biography,
+                    color = textColor,
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFFFF9F2), RoundedCornerShape(8.dp))
+                        .border(1.dp, dialogOrange.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                        .padding(8.dp)
+                )
+            }
+        }
+
+        Text(
+            "روابط ثبت شده",
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            color = dialogAccentOrange,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        Divider(color = dialogAccentOrange.copy(alpha = 0.4f))
+
+        if (spouseList.isNotEmpty()) {
+            Text(
+                "همسر",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = Color(0xFFC2185B),
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Divider(color = Color(0xFFC2185B).copy(alpha = 0.3f))
+
+            spouseList.forEach { rel ->
+                val relativeId = if (rel.personId1 == person.id) rel.personId2 else rel.personId1
+                val relative = allPersons.find { it.id == relativeId }
+                if (relative != null) {
+                    var relTypeName = if (spouseList.size > 1) {
+                        val isSecond = isSecondSpouseRelation(rel.type)
+                        val labelText = if (isSecond) "همسر دوم" else "همسر اول"
+                        val isEx = rel.type == "Divorced" || rel.type == "SecondSpouse_Divorced"
+                        if (isEx) "$labelText (سابق)" else labelText
+                    } else {
+                        val isEx = rel.type == "Divorced" || rel.type == "SecondSpouse_Divorced"
+                        if (isEx) "همسر سابق" else "همسر"
+                    }
+
+                    val bloodRel = RelationshipCalculator.getBloodRelationshipNameBetweenSpouses(relative, person, allPersons, relationships)
+                    if (bloodRel != null) {
+                        relTypeName += " ($bloodRel)"
+                    }
+
+                    val modifier = if (onRelativeClick != null) {
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFFCE4EC), RoundedCornerShape(6.dp))
+                            .border(1.dp, Color(0xFFC2185B).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                            .clickable { onRelativeClick(relativeId) }
+                            .padding(8.dp)
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFFCE4EC), RoundedCornerShape(6.dp))
+                            .border(1.dp, Color(0xFFC2185B).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                            .padding(8.dp)
+                    }
+
+                    Row(
+                        modifier = modifier,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(relative.fullName, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
+                        Text(relTypeName, fontSize = 11.sp, color = Color(0xFFC2185B), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        if (parentsList.isNotEmpty()) {
+            Text(
+                "والدین (پدر و مادر)",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = Color(0xFF4A148C),
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Divider(color = Color(0xFF4A148C).copy(alpha = 0.3f))
+
+            parentsList.forEach { rel ->
+                val relativeId = if (rel.personId1 == person.id) rel.personId2 else rel.personId1
+                val relative = allPersons.find { it.id == relativeId }
+                if (relative != null) {
+                    val relTypeName = when (rel.type) {
+                        "Adoptive-Parent-Child" -> if (relative.gender == "Male") "پدرخوانده" else "مادرخوانده"
+                        else -> if (relative.gender == "Male") "پدر" else "مادر"
+                    }
+                    val modifier = if (onRelativeClick != null) {
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF3E5F5), RoundedCornerShape(6.dp))
+                            .border(1.dp, Color(0xFF4A148C).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                            .clickable { onRelativeClick(relativeId) }
+                            .padding(8.dp)
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF3E5F5), RoundedCornerShape(6.dp))
+                            .border(1.dp, Color(0xFF4A148C).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                            .padding(8.dp)
+                    }
+
+                    Row(
+                        modifier = modifier,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(relative.fullName, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
+                        Text(relTypeName, fontSize = 11.sp, color = Color(0xFF4A148C), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        if (childrenList.isNotEmpty()) {
+            Text(
+                "فرزندان",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = Color(0xFF0288D1),
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Divider(color = Color(0xFF0288D1).copy(alpha = 0.3f))
+
+            childrenList.forEach { rel ->
+                val relativeId = if (rel.personId1 == person.id) rel.personId2 else rel.personId1
+                val relative = allPersons.find { it.id == relativeId }
+                if (relative != null) {
+                    val relTypeName = when (rel.type) {
+                        "Parent-Child" -> "فرزند"
+                        else -> "فرزندخوانده"
+                    }
+                    val modifier = if (onRelativeClick != null) {
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFE1F5FE), RoundedCornerShape(6.dp))
+                            .border(1.dp, Color(0xFF0288D1).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                            .clickable { onRelativeClick(relativeId) }
+                            .padding(8.dp)
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFE1F5FE), RoundedCornerShape(6.dp))
+                            .border(1.dp, Color(0xFF0288D1).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                            .padding(8.dp)
+                    }
+
+                    Row(
+                        modifier = modifier,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(relative.fullName, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
+                        Text(relTypeName, fontSize = 11.sp, color = Color(0xFF0288D1), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        if (spouseList.isEmpty() && parentsList.isEmpty() && childrenList.isEmpty()) {
+            Text("رابطه‌ای برای این شخص ثبت نشده است.", fontSize = 11.sp, color = textColor.copy(alpha = 0.6f))
+        }
+
+        if (siblings.isNotEmpty()) {
+            Text(
+                "خواهران و برادران",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = dialogAccentOrange,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Divider(color = dialogAccentOrange.copy(alpha = 0.4f))
+
+            siblings.forEach { sib ->
+                val relTypeName = if (sib.gender == "Male") "برادر" else "خواهر"
+                val modifier = if (onRelativeClick != null) {
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFE8F5E9), RoundedCornerShape(6.dp))
+                        .border(1.dp, Color(0xFF4CAF50).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                        .clickable { onRelativeClick(sib.id) }
+                        .padding(8.dp)
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFE8F5E9), RoundedCornerShape(6.dp))
+                        .border(1.dp, Color(0xFF4CAF50).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                        .padding(8.dp)
+                }
+
+                Row(
+                    modifier = modifier,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(sib.fullName, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
+                    Text(relTypeName, fontSize = 11.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProfileExportCard(
+    person: Person,
+    relationships: List<Relationship>,
+    allPersons: List<Person>,
+    spouseList: List<Relationship>,
+    parentsList: List<Relationship>,
+    childrenList: List<Relationship>,
+    siblings: List<Person>,
+    textColor: Color,
+    dialogOrange: Color,
+    dialogAccentOrange: Color
+) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        Surface(
+            modifier = Modifier
+                .requiredWidth(360.dp)
+                .wrapContentHeight(align = Alignment.Top, unbounded = true)
+                .border(3.dp, dialogOrange, RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp),
+            color = Color.White
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(align = Alignment.Top, unbounded = true)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(if (person.gender == "Male") Color(0xFFBBDEFB) else Color(0xFFF8BBD0))
+                            .border(1.5.dp, if (person.photoUris.isNotEmpty()) dialogAccentOrange else Color.Transparent, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (person.photoUris.isNotEmpty()) {
+                            Image(
+                                painter = rememberAsyncImagePainter(model = person.photoUris.firstOrNull()?.let { java.io.File(it) }),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(
+                                if (person.gender == "Male") Icons.Default.Boy else Icons.Default.Girl,
+                                contentDescription = null,
+                                tint = if (person.gender == "Male") Color(0xFF1976D2) else Color(0xFFC2185B),
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = person.fullName,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = textColor
+                        )
+                        Text(
+                            text = "شناسنامه و مشخصات عضو خانواده",
+                            fontSize = 11.sp,
+                            color = dialogAccentOrange
+                        )
+                    }
+                }
+
+                Divider(color = dialogOrange.copy(alpha = 0.3f), thickness = 1.dp)
+
+                PersonProfileContent(
+                    person = person,
+                    relationships = relationships,
+                    allPersons = allPersons,
+                    spouseList = spouseList,
+                    parentsList = parentsList,
+                    childrenList = childrenList,
+                    siblings = siblings,
+                    textColor = textColor,
+                    dialogOrange = dialogOrange,
+                    dialogAccentOrange = dialogAccentOrange,
+                    onRelativeClick = null
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Divider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 1.dp)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "سامانه شجره‌نامه فامیل",
+                        fontSize = 10.sp,
+                        color = Color.Gray,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "derakht-shajare",
+                        fontSize = 9.sp,
+                        color = Color.LightGray
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun MemberDetailsDialog(
     person: Person,
@@ -6570,13 +7316,13 @@ fun MemberDetailsDialog(
     }
 
     val parentIds = remember(person, relationships) {
-        relationships.filter { it.type == "Parent-Child" && it.personId2 == person.id }.map { it.personId1 }
+        relationships.filter { (it.type == "Parent-Child" || it.type == "Adoptive-Parent-Child") && it.personId2 == person.id }.map { it.personId1 }
     }
 
     val siblings = remember(person, relationships, allPersons, parentIds) {
         if (parentIds.isEmpty()) emptyList<Person>() else {
             val siblingIds = relationships.filter { 
-                it.type == "Parent-Child" && 
+                (it.type == "Parent-Child" || it.type == "Adoptive-Parent-Child") && 
                 parentIds.contains(it.personId1) && 
                 it.personId2 != person.id 
             }.map { it.personId2 }.distinct()
@@ -6592,15 +7338,20 @@ fun MemberDetailsDialog(
 
     val parentsList = remember(person, directRelationships) {
         directRelationships.filter { rel ->
-            rel.type == "Parent-Child" && rel.personId2 == person.id
+            (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") && rel.personId2 == person.id
         }
     }
 
     val childrenList = remember(person, directRelationships) {
         directRelationships.filter { rel ->
-            (rel.type == "Parent-Child" && rel.personId1 == person.id) || rel.type == "Adoptive-Parent-Child"
+            (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") && rel.personId1 == person.id
         }
     }
+
+    var isExportingProfile by remember { mutableStateOf(false) }
+    var profileExportIntent by remember { mutableStateOf<ProfileExportIntent?>(null) }
+    val profileGraphicsLayer = rememberGraphicsLayer()
+    val context = LocalContext.current
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         AlertDialog(
@@ -6643,373 +7394,226 @@ fun MemberDetailsDialog(
                     Text(person.fullName, fontWeight = FontWeight.Bold, color = textColor)
                 }
 
-                // 3-dot action menu for all operations
+                // Action buttons and 3-dot menu
                 var showActionMenu by remember { mutableStateOf(false) }
-                val context = LocalContext.current
-                Box {
-                    IconButton(
-                        onClick = { showActionMenu = true },
-                        modifier = Modifier.testTag("member_action_menu")
-                    ) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "عملیات", tint = textColor)
-                    }
-                    DropdownMenu(
-                        expanded = showActionMenu,
-                        onDismissRequest = { showActionMenu = false },
-                        modifier = Modifier.background(Color.White)
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("ویرایش مشخصات عضو", color = textColor) },
-                            onClick = {
-                                showActionMenu = false
-                                onEditPerson(person)
-                            },
-                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = dialogAccentOrange) }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isExportingProfile) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp).padding(2.dp),
+                            strokeWidth = 2.dp,
+                            color = dialogAccentOrange
                         )
-                        DropdownMenuItem(
-                            text = { Text("افزودن همسر", color = textColor) },
+                    } else {
+                        IconButton(
                             onClick = {
-                                showActionMenu = false
-                                onAddSpouse(person)
-                            },
-                            leadingIcon = { Icon(Icons.Default.Favorite, contentDescription = null, tint = dialogAccentOrange) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("افزودن فرزند (زیرمجموعه)", color = textColor) },
-                            onClick = {
-                                showActionMenu = false
-                                onAddChild(person)
-                            },
-                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, tint = dialogAccentOrange) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("کپی اطلاعات عضو", color = textColor) },
-                            onClick = {
-                                showActionMenu = false
-                                val dateLabel = if (person.isDeceased) "تاریخ حیات" else "تاریخ تولد"
-                                val dateValue = if (person.birthDate != null || person.isDeceased) formatLifeDates(person.birthDate, person.deathDate, person.isDeceased, getCurrentJalaliYear()).toFarsiNumbers() else "ثبت نشده"
-                                val info = """
-                                    نام: ${person.fullName}
-                                    جنسیت: ${if (person.gender == "Male") "آقا" else "خانم"}
-                                    $dateLabel: $dateValue
-                                    محل زندگی: ${person.birthPlace ?: "ثبت نشده"}
-                                    شغل: ${person.occupation ?: "ثبت نشده"}
-                                    توضیحات: ${person.biography ?: "ثبت نشده"}
-                                """.trimIndent()
-                                val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("مشخصات عضو", info)
-                                clipboardManager.setPrimaryClip(clip)
-                                Toast.makeText(context, "اطلاعات عضو در حافظه کپی شد", Toast.LENGTH_SHORT).show()
-                            },
-                            leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = dialogAccentOrange) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("مسیر یابی از این شخص (مبداء)", color = textColor) },
-                            onClick = {
-                                showActionMenu = false
-                                onHighlightFrom()
-                            },
-                            leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = dialogAccentOrange) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("مسیر یابی به این شخص (مقصد)", color = textColor) },
-                            onClick = {
-                                showActionMenu = false
-                                onHighlightTo()
-                            },
-                            leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null, tint = dialogAccentOrange) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("تغییر یا انتقال ارتباط", color = textColor) },
-                            onClick = {
-                                showActionMenu = false
-                                onMoveRelation(person)
-                            },
-                            leadingIcon = { Icon(Icons.Default.SyncAlt, contentDescription = null, tint = dialogAccentOrange) }
-                        )
-                        if (parentsList.size < 2) {
-                            DropdownMenuItem(
-                                text = { Text("افزودن پدر و مادر", color = textColor) },
-                                onClick = {
-                                    showActionMenu = false
-                                    onAddParents(person)
-                                },
-                                leadingIcon = { Icon(Icons.Default.People, contentDescription = null, tint = dialogAccentOrange) }
+                                profileExportIntent = ProfileExportIntent.DOWNLOAD
+                                isExportingProfile = true
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Download,
+                                contentDescription = "دانلود عکس پروفایل کامل",
+                                tint = dialogAccentOrange
                             )
                         }
-                        DropdownMenuItem(
-                            text = { Text("تهیه پشتیبان عضو و زیرمجموعه‌ها", color = textColor) },
+                        IconButton(
                             onClick = {
-                                showActionMenu = false
-                                onBackupSubtree(person)
-                            },
-                            leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = dialogAccentOrange) }
-                        )
-                        Divider(modifier = Modifier.padding(vertical = 4.dp))
-                        DropdownMenuItem(
-                            text = { Text("حذف این عضو فامیل", color = Color.Red) },
-                            onClick = {
-                                showActionMenu = false
-                                onDelete()
-                            },
-                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red) }
-                        )
+                                profileExportIntent = ProfileExportIntent.SHARE
+                                isExportingProfile = true
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Share,
+                                contentDescription = "اشتراک‌گذاری سریع",
+                                tint = dialogAccentOrange
+                            )
+                        }
+                    }
+
+                    Box {
+                        IconButton(
+                            onClick = { showActionMenu = true },
+                            modifier = Modifier.testTag("member_action_menu")
+                        ) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "عملیات", tint = textColor)
+                        }
+                        DropdownMenu(
+                            expanded = showActionMenu,
+                            onDismissRequest = { showActionMenu = false },
+                            modifier = Modifier.background(Color.White)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("ویرایش مشخصات عضو", color = textColor) },
+                                onClick = {
+                                    showActionMenu = false
+                                    onEditPerson(person)
+                                },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = dialogAccentOrange) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("افزودن همسر", color = textColor) },
+                                onClick = {
+                                    showActionMenu = false
+                                    onAddSpouse(person)
+                                },
+                                leadingIcon = { Icon(Icons.Default.Favorite, contentDescription = null, tint = dialogAccentOrange) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("افزودن فرزند (زیرمجموعه)", color = textColor) },
+                                onClick = {
+                                    showActionMenu = false
+                                    onAddChild(person)
+                                },
+                                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, tint = dialogAccentOrange) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("کپی اطلاعات عضو", color = textColor) },
+                                onClick = {
+                                    showActionMenu = false
+                                    val dateLabel = if (person.isDeceased) "تاریخ حیات" else "تاریخ تولد"
+                                    val dateValue = if (person.birthDate != null || person.isDeceased) formatLifeDates(person.birthDate, person.deathDate, person.isDeceased, getCurrentJalaliYear()).toFarsiNumbers() else "ثبت نشده"
+                                    val info = """
+                                        نام: ${person.fullName}
+                                        جنسیت: ${if (person.gender == "Male") "آقا" else "خانم"}
+                                        $dateLabel: $dateValue
+                                        محل زندگی: ${person.birthPlace ?: "ثبت نشده"}
+                                        شغل: ${person.occupation ?: "ثبت نشده"}
+                                        توضیحات: ${person.biography ?: "ثبت نشده"}
+                                    """.trimIndent()
+                                    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("مشخصات عضو", info)
+                                    clipboardManager.setPrimaryClip(clip)
+                                    Toast.makeText(context, "اطلاعات عضو در حافظه کپی شد", Toast.LENGTH_SHORT).show()
+                                },
+                                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = dialogAccentOrange) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("مسیر یابی از این شخص (مبداء)", color = textColor) },
+                                onClick = {
+                                    showActionMenu = false
+                                    onHighlightFrom()
+                                },
+                                leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = dialogAccentOrange) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("مسیر یابی به این شخص (مقصد)", color = textColor) },
+                                onClick = {
+                                    showActionMenu = false
+                                    onHighlightTo()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null, tint = dialogAccentOrange) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("تغییر یا انتقال ارتباط", color = textColor) },
+                                onClick = {
+                                    showActionMenu = false
+                                    onMoveRelation(person)
+                                },
+                                leadingIcon = { Icon(Icons.Default.SyncAlt, contentDescription = null, tint = dialogAccentOrange) }
+                            )
+                            if (parentsList.size < 2) {
+                                DropdownMenuItem(
+                                    text = { Text("افزودن پدر و مادر", color = textColor) },
+                                    onClick = {
+                                        showActionMenu = false
+                                        onAddParents(person)
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.People, contentDescription = null, tint = dialogAccentOrange) }
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("تهیه پشتیبان عضو و زیرمجموعه‌ها", color = textColor) },
+                                onClick = {
+                                    showActionMenu = false
+                                    onBackupSubtree(person)
+                                },
+                                leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = dialogAccentOrange) }
+                            )
+                            Divider(modifier = Modifier.padding(vertical = 4.dp))
+                            DropdownMenuItem(
+                                text = { Text("حذف این عضو فامیل", color = Color.Red) },
+                                onClick = {
+                                    showActionMenu = false
+                                    onDelete()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red) }
+                            )
+                        }
                     }
                 }
             }
         },
         text = {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item {
-                    Text(
-                        "مشخصات فردی",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = dialogAccentOrange
+            Box {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    PersonProfileContent(
+                        person = person,
+                        relationships = relationships,
+                        allPersons = allPersons,
+                        spouseList = spouseList,
+                        parentsList = parentsList,
+                        childrenList = childrenList,
+                        siblings = siblings,
+                        textColor = textColor,
+                        dialogOrange = dialogOrange,
+                        dialogAccentOrange = dialogAccentOrange,
+                        onRelativeClick = { relativeId ->
+                            viewModel?.setGlowPersonId(relativeId)
+                            onDismiss()
+                        }
                     )
-                    Divider(color = dialogAccentOrange.copy(alpha = 0.4f))
                 }
 
-                item {
-                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        Text("جنسیت:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
-                        Text(if (person.gender == "Male") "مرد (آقا)" else "زن (خانم)", color = textColor, fontSize = 12.sp)
-                    }
-                }
-
-                if (person.birthDate != null || person.isDeceased) {
-                    item {
-                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (person.isDeceased) "تاریخ حیات:" else "تاریخ تولد:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
-                            Text(formatLifeDates(person.birthDate, person.deathDate, person.isDeceased, getCurrentJalaliYear()).toFarsiNumbers(), color = textColor, fontSize = 12.sp)
-                        }
-                    }
-                }
-
-                if (person.birthPlace != null) {
-                    item {
-                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                            Text("محل زندگی / تولد:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
-                            Text(person.birthPlace, color = textColor, fontSize = 12.sp)
-                        }
-                    }
-                }
-
-                if (person.isDeceased) {
-                    item {
+                if (isExportingProfile) {
+                    Box(
+                        modifier = Modifier.size(1.dp)
+                    ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color.DarkGray.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                                .padding(8.dp)
-                        ) {
-                            Column {
-                                Text("وضعیت: متوفی (مرحوم)", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-
-                                if (person.deathPlace != null) {
-                                    Text("محل فوت: ${person.deathPlace}", color = textColor, fontSize = 11.sp)
+                                .offset(x = 10000.dp)
+                                .requiredWidth(360.dp)
+                                .wrapContentHeight(align = Alignment.Top, unbounded = true)
+                                .drawWithContent {
+                                    profileGraphicsLayer.record { this@drawWithContent.drawContent() }
+                                    drawLayer(profileGraphicsLayer)
                                 }
-                            }
-                        }
-                    }
-                }
-
-                if (person.occupation != null) {
-                    item {
-                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                            Text("شغل / پیشه:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
-                            Text(person.occupation, color = textColor, fontSize = 12.sp)
-                        }
-                    }
-                }
-
-                if (person.biography != null) {
-                    item {
-                        Column {
-                            Text("بیوگرافی / یادداشت:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
-                            Text(
-                                person.biography,
-                                color = textColor,
-                                fontSize = 11.sp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFFFF9F2), RoundedCornerShape(8.dp))
-                                    .border(1.dp, dialogOrange.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                                    .padding(8.dp)
+                        ) {
+                            ProfileExportCard(
+                                person = person,
+                                relationships = relationships,
+                                allPersons = allPersons,
+                                spouseList = spouseList,
+                                parentsList = parentsList,
+                                childrenList = childrenList,
+                                siblings = siblings,
+                                textColor = textColor,
+                                dialogOrange = dialogOrange,
+                                dialogAccentOrange = dialogAccentOrange
                             )
                         }
                     }
-                }
 
-                item {
-                    Text(
-                        "روابط ثبت شده",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = dialogAccentOrange,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                    Divider(color = dialogAccentOrange.copy(alpha = 0.4f))
-                }
-
-                if (spouseList.isNotEmpty()) {
-                    item {
-                        Text(
-                            "همسر",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = Color(0xFFC2185B),
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                        Divider(color = Color(0xFFC2185B).copy(alpha = 0.3f))
-                    }
-                    items(spouseList) { rel ->
-                        val relativeId = if (rel.personId1 == person.id) rel.personId2 else rel.personId1
-                        val relative = allPersons.find { it.id == relativeId }
-                        if (relative != null) {
-                            var relTypeName = if (spouseList.size > 1) {
-                                val isSecond = isSecondSpouseRelation(rel.type)
-                                val labelText = if (isSecond) "همسر دوم" else "همسر اول"
-                                val isEx = rel.type == "Divorced" || rel.type == "SecondSpouse_Divorced"
-                                if (isEx) "$labelText (سابق)" else labelText
-                            } else {
-                                val isEx = rel.type == "Divorced" || rel.type == "SecondSpouse_Divorced"
-                                if (isEx) "همسر سابق" else "همسر"
+                    LaunchedEffect(isExportingProfile) {
+                        kotlinx.coroutines.delay(450)
+                        try {
+                            val bitmap = profileGraphicsLayer.toImageBitmap().asAndroidBitmap()
+                            if (profileExportIntent == ProfileExportIntent.DOWNLOAD) {
+                                com.example.utils.PersonProfileExporter.savePersonProfileImage(context, bitmap, person)
+                            } else if (profileExportIntent == ProfileExportIntent.SHARE) {
+                                com.example.utils.PersonProfileExporter.sharePersonProfileImage(context, bitmap, person)
                             }
-                            
-                            val bloodRel = RelationshipCalculator.getBloodRelationshipNameBetweenSpouses(relative, person, allPersons, relationships)
-                            if (bloodRel != null) {
-                                relTypeName += " ($bloodRel)"
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFFCE4EC), RoundedCornerShape(6.dp))
-                                    .border(1.dp, Color(0xFFC2185B).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                                    .clickable {
-                                        viewModel?.setGlowPersonId(relativeId)
-                                        onDismiss()
-                                    }
-                                    .padding(8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(relative.fullName, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
-                                Text(relTypeName, fontSize = 11.sp, color = Color(0xFFC2185B), fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-
-                if (parentsList.isNotEmpty()) {
-                    item {
-                        Text(
-                            "والدین (پدر و مادر)",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = Color(0xFF4A148C),
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                        Divider(color = Color(0xFF4A148C).copy(alpha = 0.3f))
-                    }
-                    items(parentsList) { rel ->
-                        val relativeId = if (rel.personId1 == person.id) rel.personId2 else rel.personId1
-                        val relative = allPersons.find { it.id == relativeId }
-                        if (relative != null) {
-                            val relTypeName = if (relative.gender == "Male") "پدر" else "مادر"
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFF3E5F5), RoundedCornerShape(6.dp))
-                                    .border(1.dp, Color(0xFF4A148C).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                                    .clickable {
-                                        viewModel?.setGlowPersonId(relativeId)
-                                        onDismiss()
-                                    }
-                                    .padding(8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(relative.fullName, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
-                                Text(relTypeName, fontSize = 11.sp, color = Color(0xFF4A148C), fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-
-                if (childrenList.isNotEmpty()) {
-                    item {
-                        Text(
-                            "فرزندان",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = Color(0xFF0288D1),
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                        Divider(color = Color(0xFF0288D1).copy(alpha = 0.3f))
-                    }
-                    items(childrenList) { rel ->
-                        val relativeId = if (rel.personId1 == person.id) rel.personId2 else rel.personId1
-                        val relative = allPersons.find { it.id == relativeId }
-                        if (relative != null) {
-                            val relTypeName = when (rel.type) {
-                                "Parent-Child" -> "فرزند"
-                                else -> "فرزندخوانده"
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFE1F5FE), RoundedCornerShape(6.dp))
-                                    .border(1.dp, Color(0xFF0288D1).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                                    .clickable {
-                                        viewModel?.setGlowPersonId(relativeId)
-                                        onDismiss()
-                                    }
-                                    .padding(8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(relative.fullName, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
-                                Text(relTypeName, fontSize = 11.sp, color = Color(0xFF0288D1), fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-
-                if (directRelationships.isEmpty()) {
-                    item {
-                        Text("رابطه‌ای برای این شخص ثبت نشده است.", fontSize = 11.sp, color = textColor.copy(alpha = 0.6f))
-                    }
-                }
-
-                if (siblings.isNotEmpty()) {
-                    item {
-                        Text(
-                            "خواهران و برادران",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = dialogAccentOrange,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                        Divider(color = dialogAccentOrange.copy(alpha = 0.4f))
-                    }
-                    items(siblings) { sib ->
-                        val relTypeName = if (sib.gender == "Male") "برادر" else "خواهر"
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFFE8F5E9), RoundedCornerShape(6.dp))
-                                .border(1.dp, Color(0xFF4CAF50).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                                .clickable {
-                                    viewModel?.setGlowPersonId(sib.id)
-                                    onDismiss()
-                                }
-                                .padding(8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(sib.fullName, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
-                            Text(relTypeName, fontSize = 11.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                        } catch (e: Exception) {
+                            com.example.utils.AppLogger.e("PROFILE_EXPORT", "خطا در استخراج تصویر پروفایل", e)
+                            Toast.makeText(context, "خطا در ایجاد تصویر پروفایل", Toast.LENGTH_SHORT).show()
+                        } finally {
+                            isExportingProfile = false
+                            profileExportIntent = null
                         }
                     }
                 }
@@ -7259,8 +7863,6 @@ fun CalculatorDialog(
     var p1Dropdown by remember { mutableStateOf(false) }
     var p2Dropdown by remember { mutableStateOf(false) }
 
-    var calculatedRelation by remember { mutableStateOf<String?>(null) }
-
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -7297,7 +7899,6 @@ fun CalculatorDialog(
                                     onClick = {
                                         p1 = p
                                         p1Dropdown = false
-                                        calculatedRelation = null
                                     }
                                 )
                             }
@@ -7323,7 +7924,6 @@ fun CalculatorDialog(
                                     onClick = {
                                         p2 = p
                                         p2Dropdown = false
-                                        calculatedRelation = null
                                     }
                                 )
                             }
@@ -7335,7 +7935,6 @@ fun CalculatorDialog(
                     val computed = remember(p1, p2, persons, relationships) {
                         RelationshipCalculator.getRelationshipLabel(p1!!, p2!!, persons, relationships)
                     }
-                    calculatedRelation = computed
 
                     Card(
                         colors = CardDefaults.cardColors(containerColor = accentColor.copy(alpha = 0.1f)),
