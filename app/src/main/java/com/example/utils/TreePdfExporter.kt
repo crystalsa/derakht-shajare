@@ -7,6 +7,8 @@ import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 object TreePdfExporter {
 
@@ -14,7 +16,7 @@ object TreePdfExporter {
         context: Context,
         bitmap: Bitmap,
         groupName: String
-    ): File {
+    ): File = withContext(Dispatchers.IO) {
         AppLogger.i("PDF_EXPORT", "شروع ذخیره بیت‌مپ به PDF. ابعاد: ${bitmap.width}x${bitmap.height}, کانفیگ: ${bitmap.config}")
 
         if (bitmap.width <= 0 || bitmap.height <= 0) {
@@ -67,7 +69,7 @@ object TreePdfExporter {
             }
             document.close()
             AppLogger.i("PDF_EXPORT", "فایل PDF با موفقیت ایجاد شد: ${file.name} (${file.length()} بایت)")
-            return file
+            file
         } finally {
             if (softwareBitmap != bitmap) {
                 softwareBitmap.recycle()

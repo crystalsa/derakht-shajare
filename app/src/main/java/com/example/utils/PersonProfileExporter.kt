@@ -12,10 +12,12 @@ import androidx.core.content.FileProvider
 import com.example.data.Person
 import java.io.File
 import java.io.FileOutputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 object PersonProfileExporter {
 
-    fun savePersonProfileImage(context: Context, bitmap: Bitmap, person: Person): Uri? {
+    suspend fun savePersonProfileImage(context: Context, bitmap: Bitmap, person: Person): Uri? = withContext(Dispatchers.IO) {
         try {
             AppLogger.i("PROFILE_EXPORT", "ذخیره عکس پروفایل برای: ${person.fullName}")
             val safeName = person.fullName.replace(Regex("[^a-zA-Z0-9\\u0600-\\u06FF]"), "_")
@@ -40,21 +42,27 @@ object PersonProfileExporter {
                     resolver.update(uri, contentValues, null, null)
                 }
                 AppLogger.i("PROFILE_EXPORT", "عکس پروفایل با موفقیت در گالری ذخیره شد: $uri")
-                Toast.makeText(context, "عکس پروفایل در گالری ذخیره شد", Toast.LENGTH_SHORT).show()
-                return uri
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "عکس پروفایل در گالری ذخیره شد", Toast.LENGTH_SHORT).show()
+                }
+                uri
             } else {
                 AppLogger.e("PROFILE_EXPORT", "امکان ایجاد URI در MediaStore وجود نداشت")
-                Toast.makeText(context, "خطا در ذخیره تصویر در گالری", Toast.LENGTH_SHORT).show()
-                return null
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "خطا در ذخیره تصویر در گالری", Toast.LENGTH_SHORT).show()
+                }
+                null
             }
         } catch (e: Exception) {
             AppLogger.e("PROFILE_EXPORT", "خطا در ذخیره تصویر پروفایل", e)
-            Toast.makeText(context, "خطا در ذخیره تصویر پروفایل", Toast.LENGTH_SHORT).show()
-            return null
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "خطا در ذخیره تصویر پروفایل", Toast.LENGTH_SHORT).show()
+            }
+            null
         }
     }
 
-    fun sharePersonProfileImage(context: Context, bitmap: Bitmap, person: Person) {
+    suspend fun sharePersonProfileImage(context: Context, bitmap: Bitmap, person: Person) = withContext(Dispatchers.IO) {
         try {
             AppLogger.i("PROFILE_EXPORT", "اشتراک‌گذاری عکس پروفایل برای: ${person.fullName}")
             val cacheDir = File(context.cacheDir, "exports").apply { mkdirs() }
@@ -74,10 +82,14 @@ object PersonProfileExporter {
             val chooser = Intent.createChooser(intent, "اشتراک‌گذاری پروفایل ${person.fullName}").apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(chooser)
+            withContext(Dispatchers.Main) {
+                context.startActivity(chooser)
+            }
         } catch (e: Exception) {
             AppLogger.e("PROFILE_EXPORT", "خطا در اشتراک‌گذاری عکس پروفایل", e)
-            Toast.makeText(context, "خطا در اشتراک‌گذاری تصویر", Toast.LENGTH_SHORT).show()
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "خطا در اشتراک‌گذاری تصویر", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }
