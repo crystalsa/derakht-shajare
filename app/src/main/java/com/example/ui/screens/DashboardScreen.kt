@@ -75,6 +75,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
 import coil.compose.rememberAsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
+import coil.compose.AsyncImagePainter
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -101,6 +104,27 @@ import com.example.viewmodel.FamilyViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
+
+private fun isBitmapVisuallyBlank(bitmap: android.graphics.Bitmap): Boolean {
+    val width = bitmap.width
+    val height = bitmap.height
+    if (width <= 0 || height <= 0) return true
+    val firstPixel = bitmap.getPixel(0, 0)
+    val numSamples = 10
+    val dx = width / numSamples
+    val dy = height / numSamples
+    if (dx <= 0 || dy <= 0) return false
+    for (i in 0 until numSamples) {
+        for (j in 0 until numSamples) {
+            val x = (i * dx).coerceIn(0, width - 1)
+            val y = (j * dy).coerceIn(0, height - 1)
+            if (bitmap.getPixel(x, y) != firstPixel) {
+                return false
+            }
+        }
+    }
+    return true
+}
 
 fun isSpouseRelation(type: String): Boolean {
     return type == "Spouse" || type == "Divorced" || type == "SecondSpouse" || type == "SecondSpouse_Divorced"
@@ -3544,9 +3568,20 @@ $databaseError
         LaunchedEffect(pdfPositions) {
             try {
                 AppLogger.i("PDF_EXPORT", "شروع فرایند تولید PDF برای خاندان: $groupName")
-                kotlinx.coroutines.delay(600)
-                val imageBitmap = graphicsLayer.toImageBitmap()
-                val bitmap = imageBitmap.asAndroidBitmap()
+                withFrameNanos { }
+                withFrameNanos { }
+
+                var imageBitmap = graphicsLayer.toImageBitmap()
+                var bitmap = imageBitmap.asAndroidBitmap()
+
+                if (isBitmapVisuallyBlank(bitmap)) {
+                    AppLogger.i("PDF_EXPORT", "تصویر رندر شده در نوبت اول خالی به نظر می‌رسد، انتظار ۲ فریم دیگر...")
+                    withFrameNanos { }
+                    withFrameNanos { }
+                    imageBitmap = graphicsLayer.toImageBitmap()
+                    bitmap = imageBitmap.asAndroidBitmap()
+                }
+
                 AppLogger.i("PDF_EXPORT", "تصویر شجره‌نامه رندر شد. ابعاد: ${bitmap.width}x${bitmap.height}, کانفیگ: ${bitmap.config}")
 
                 val file = TreePdfExporter.saveBitmapToPdf(context, bitmap, groupName)
@@ -7182,7 +7217,8 @@ fun ProfileExportCard(
     siblings: List<Person>,
     textColor: Color,
     dialogOrange: Color,
-    dialogAccentOrange: Color
+    dialogAccentOrange: Color,
+    onPhotoStateChange: ((AsyncImagePainter.State) -> Unit)? = null
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Surface(
@@ -7213,12 +7249,17 @@ fun ProfileExportCard(
                         contentAlignment = Alignment.Center
                     ) {
                         if (person.photoUris.isNotEmpty()) {
-                            Image(
-                                painter = rememberAsyncImagePainter(model = person.photoUris.firstOrNull()?.let { java.io.File(it) }),
+                            SubcomposeAsyncImage(
+                                model = person.photoUris.firstOrNull()?.let { java.io.File(it) },
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
+                                contentScale = ContentScale.Crop,
+                                onState = { state ->
+                                    onPhotoStateChange?.invoke(state)
+                                }
+                            ) {
+                                SubcomposeAsyncImageContent()
+                            }
                         } else {
                             Icon(
                                 if (person.gender == "Male") Icons.Default.Boy else Icons.Default.Girl,
@@ -7350,6 +7391,7 @@ fun MemberDetailsDialog(
 
     var isExportingProfile by remember { mutableStateOf(false) }
     var profileExportIntent by remember { mutableStateOf<ProfileExportIntent?>(null) }
+    var photoLoadState by remember(person.id, isExportingProfile) { mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty) }
     val profileGraphicsLayer = rememberGraphicsLayer()
     val context = LocalContext.current
 
@@ -7594,14 +7636,26 @@ fun MemberDetailsDialog(
                                 siblings = siblings,
                                 textColor = textColor,
                                 dialogOrange = dialogOrange,
-                                dialogAccentOrange = dialogAccentOrange
+                                dialogAccentOrange = dialogAccentOrange,
+                                onPhotoStateChange = { photoLoadState = it }
                             )
                         }
                     }
 
                     LaunchedEffect(isExportingProfile) {
-                        kotlinx.coroutines.delay(450)
                         try {
+                            if (person.photoUris.isNotEmpty()) {
+                                val startTime = System.currentTimeMillis()
+                                while (photoLoadState !is AsyncImagePainter.State.Success &&
+                                       photoLoadState !is AsyncImagePainter.State.Error &&
+                                       (System.currentTimeMillis() - startTime) < 3000
+                                ) {
+                                    kotlinx.coroutines.delay(30)
+                                }
+                            }
+                            withFrameNanos { }
+                            withFrameNanos { }
+
                             val bitmap = profileGraphicsLayer.toImageBitmap().asAndroidBitmap()
                             if (profileExportIntent == ProfileExportIntent.DOWNLOAD) {
                                 com.example.utils.PersonProfileExporter.savePersonProfileImage(context, bitmap, person)
