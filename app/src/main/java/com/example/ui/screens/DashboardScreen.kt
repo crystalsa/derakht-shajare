@@ -152,7 +152,7 @@ fun getFullOrOriginalPhotoPath(photoPath: String): String {
     return photoPath
 }
 
-fun cropAndSaveBitmap(
+suspend fun cropAndSaveBitmap(
     context: android.content.Context,
     originalBitmap: android.graphics.Bitmap,
     scale: Float,
@@ -160,7 +160,7 @@ fun cropAndSaveBitmap(
     offsetY: Float,
     boxSizePx: Float,
     cropSizePx: Float
-): String? {
+): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
     try {
         val outputSize = 400
         val croppedBitmap = android.graphics.Bitmap.createBitmap(outputSize, outputSize, android.graphics.Bitmap.Config.ARGB_8888)
@@ -204,15 +204,32 @@ fun cropAndSaveBitmap(
         java.io.FileOutputStream(croppedFile).use { out ->
             croppedBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
         }
+        croppedBitmap.recycle()
 
-        java.io.FileOutputStream(originalFile).use { out ->
-            originalBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+        // Downscale the original bitmap before saving to cap longest side at 1600px
+        val maxDim = 1600
+        val origW = originalBitmap.width
+        val origH = originalBitmap.height
+        val scaledOriginal = if (origW > maxDim || origH > maxDim) {
+            val ratio = maxDim.toFloat() / Math.max(origW, origH)
+            val newW = (origW * ratio).toInt().coerceAtLeast(1)
+            val newH = (origH * ratio).toInt().coerceAtLeast(1)
+            android.graphics.Bitmap.createScaledBitmap(originalBitmap, newW, newH, true)
+        } else {
+            originalBitmap
         }
 
-        return croppedFile.absolutePath
+        java.io.FileOutputStream(originalFile).use { out ->
+            scaledOriginal.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+        }
+        if (scaledOriginal != originalBitmap) {
+            scaledOriginal.recycle()
+        }
+
+        croppedFile.absolutePath
     } catch (e: Exception) {
         e.printStackTrace()
-        return null
+        null
     }
 }
 
@@ -2053,42 +2070,54 @@ $databaseError
                         }
 
                         // Actions
+                        var isSavingPhoto by remember { mutableStateOf(false) }
+                        val cropScope = rememberCoroutineScope()
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Button(
+                                enabled = !isSavingPhoto,
                                 onClick = {
-                                    val croppedPath = cropAndSaveBitmap(
-                                        context = context,
-                                        originalBitmap = originalBitmap,
-                                        scale = scale,
-                                        offsetX = offsetX,
-                                        offsetY = offsetY,
-                                        boxSizePx = boxSizePx,
-                                        cropSizePx = cropSizePx
-                                    )
-                                    if (croppedPath != null && personForPhotoEdit != null) {
-                                        val freshPerson = allPersonsRaw.find { it.id == personForPhotoEdit!!.id } ?: personForPhotoEdit!!
-                                        val currentUris = freshPerson.photoUris.toMutableList()
-                                        currentUris.add(croppedPath)
-                                        val newPhotoUri = currentUris.joinToString("|")
-                                        val updatedPerson = freshPerson.copy(photoUri = newPhotoUri)
-                                        viewModel.updatePerson(updatedPerson)
-                                        Toast.makeText(context, "عکس با موفقیت ذخیره شد", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "خطا در ذخیره عکس", Toast.LENGTH_SHORT).show()
+                                    isSavingPhoto = true
+                                    cropScope.launch {
+                                        val croppedPath = cropAndSaveBitmap(
+                                            context = context,
+                                            originalBitmap = originalBitmap,
+                                            scale = scale,
+                                            offsetX = offsetX,
+                                            offsetY = offsetY,
+                                            boxSizePx = boxSizePx,
+                                            cropSizePx = cropSizePx
+                                        )
+                                        isSavingPhoto = false
+                                        if (croppedPath != null && personForPhotoEdit != null) {
+                                            val freshPerson = allPersonsRaw.find { it.id == personForPhotoEdit!!.id } ?: personForPhotoEdit!!
+                                            val currentUris = freshPerson.photoUris.toMutableList()
+                                            currentUris.add(croppedPath)
+                                            val newPhotoUri = currentUris.joinToString("|")
+                                            val updatedPerson = freshPerson.copy(photoUri = newPhotoUri)
+                                            viewModel.updatePerson(updatedPerson)
+                                            Toast.makeText(context, "عکس با موفقیت ذخیره شد", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "خطا در ذخیره عکس", Toast.LENGTH_SHORT).show()
+                                        }
+                                        showCropDialog = false
+                                        tempPickedUri = null
                                     }
-                                    showCropDialog = false
-                                    tempPickedUri = null
                                 },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(containerColor = accentColor)
                             ) {
-                                Text("تایید و ذخیره", color = Color.White)
+                                if (isSavingPhoto) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                                } else {
+                                    Text("تایید و ذخیره", color = Color.White)
+                                }
                             }
 
                             OutlinedButton(
+                                enabled = !isSavingPhoto,
                                 onClick = {
                                     showCropDialog = false
                                     tempPickedUri = null
@@ -2958,80 +2987,90 @@ $databaseError
     }
 
     if (showBackupDialog) {
-        val backupJson = viewModel.exportBackupToJson(tempExportGroupId)
+        var backupJson by remember(tempExportGroupId) { mutableStateOf<String?>(null) }
+        LaunchedEffect(tempExportGroupId) {
+            backupJson = viewModel.exportBackupToJson(tempExportGroupId)
+        }
         var fileName by remember(backupFileNameInput) { mutableStateOf(backupFileNameInput) }
         
         AlertDialog(
             onDismissRequest = { showBackupDialog = false },
             title = { Text(if (tempExportGroupId == null) "تهیه فایل پشتیبان کلی" else "تهیه فایل پشتیبان گروه", fontWeight = FontWeight.Bold, color = textColor) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "برای ذخیره بکاپ به عنوان فایل در گوشی خود، ابتدا نام دلخواه را در کادر زیر وارد کنید و دکمه ذخیره فایل را بزنید:",
-                        fontSize = 12.sp,
-                        color = textColor.copy(alpha = 0.7f)
-                    )
-                    
-                    OutlinedTextField(
-                        value = fileName,
-                        onValueChange = { fileName = it },
-                        label = { Text("نام فایل پشتیبان (بدون پسوند)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color.White,
-                            unfocusedContainerColor = Color.White,
-                            focusedTextColor = textColor,
-                            unfocusedTextColor = textColor
-                        )
-                    )
-                    
-                    Button(
-                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                        onClick = {
-                            if (fileName.isNotBlank()) {
-                                backupJsonToSave = backupJson
-                                try {
-                                    createDocumentLauncher.launch("${fileName}.json")
-                                    showBackupDialog = false
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "خطا در فراخوانی ذخیره‌ساز سیستم: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                                }
-                            } else {
-                                Toast.makeText(context, "لطفا ابتدا نام فایل را وارد کنید.", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Save, contentDescription = null, tint = Color.White)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("ذخیره به عنوان فایل (.json) در گوشی", color = Color.White, fontWeight = FontWeight.Bold)
+                if (backupJson == null) {
+                    Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = accentColor)
                     }
-                    
-                    Divider(modifier = Modifier.padding(vertical = 4.dp))
-                    
-                    Text(
-                        text = "روش جایگزین: کپی کردن کد متنی زیر و ذخیره آن:",
-                        fontSize = 11.sp,
-                        color = textColor.copy(alpha = 0.5f)
-                    )
-                    
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(110.dp)
-                            .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
-                            .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
-                            .padding(8.dp)
-                    ) {
-                        androidx.compose.foundation.lazy.LazyColumn {
-                            item {
-                                Text(
-                                    text = backupJson,
-                                    fontSize = 10.sp,
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                    color = Color.DarkGray
-                                )
+                } else {
+                    val currentJson = backupJson!!
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "برای ذخیره بکاپ به عنوان فایل در گوشی خود، ابتدا نام دلخواه را در کادر زیر وارد کنید و دکمه ذخیره فایل را بزنید:",
+                            fontSize = 12.sp,
+                            color = textColor.copy(alpha = 0.7f)
+                        )
+                        
+                        OutlinedTextField(
+                            value = fileName,
+                            onValueChange = { fileName = it },
+                            label = { Text("نام فایل پشتیبان (بدون پسوند)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White,
+                                focusedTextColor = textColor,
+                                unfocusedTextColor = textColor
+                            )
+                        )
+                        
+                        Button(
+                            colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                            onClick = {
+                                if (fileName.isNotBlank()) {
+                                    backupJsonToSave = currentJson
+                                    try {
+                                        createDocumentLauncher.launch("${fileName}.json")
+                                        showBackupDialog = false
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "خطا در فراخوانی ذخیره‌ساز سیستم: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "لطفا ابتدا نام فایل را وارد کنید.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Save, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("ذخیره به عنوان فایل (.json) در گوشی", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        
+                        Divider(modifier = Modifier.padding(vertical = 4.dp))
+                        
+                        Text(
+                            text = "روش جایگزین: کپی کردن کد متنی زیر و ذخیره آن:",
+                            fontSize = 11.sp,
+                            color = textColor.copy(alpha = 0.5f)
+                        )
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(110.dp)
+                                .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+                                .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
+                                .padding(8.dp)
+                        ) {
+                            androidx.compose.foundation.lazy.LazyColumn {
+                                item {
+                                    Text(
+                                        text = currentJson,
+                                        fontSize = 10.sp,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        color = Color.DarkGray
+                                    )
+                                }
                             }
                         }
                     }
@@ -3039,10 +3078,11 @@ $databaseError
             },
             confirmButton = {
                 Button(
+                    enabled = backupJson != null,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
                     onClick = {
                         val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val clip = android.content.ClipData.newPlainText("FamilyTreeBackup", backupJson)
+                        val clip = android.content.ClipData.newPlainText("FamilyTreeBackup", backupJson ?: "")
                         clipboardManager.setPrimaryClip(clip)
                         Toast.makeText(context, "کد پشتیبان با موفقیت کپی شد.", Toast.LENGTH_SHORT).show()
                         showBackupDialog = false
@@ -3235,80 +3275,90 @@ $databaseError
 
     if (showSubtreeBackupPerson != null) {
         val rootPerson = showSubtreeBackupPerson!!
-        val backupJson = viewModel.exportSubtreeBackupToJson(rootPerson.id)
+        var backupJson by remember(rootPerson) { mutableStateOf<String?>(null) }
+        LaunchedEffect(rootPerson) {
+            backupJson = viewModel.exportSubtreeBackupToJson(rootPerson.id)
+        }
         var fileName by remember(rootPerson) { mutableStateOf("backup_${rootPerson.firstName}_${rootPerson.lastName}") }
         
         AlertDialog(
             onDismissRequest = { showSubtreeBackupPerson = null },
             title = { Text("تهیه فایل پشتیبان عضو و زیرمجموعه‌ها", fontWeight = FontWeight.Bold, color = textColor) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "فایل پشتیبان شامل این عضو (${rootPerson.fullName})، همسر و تمام فرزندان و نوادگان ایشان خواهد بود.",
-                        fontSize = 12.sp,
-                        color = textColor.copy(alpha = 0.7f)
-                    )
-                    
-                    OutlinedTextField(
-                        value = fileName,
-                        onValueChange = { fileName = it },
-                        label = { Text("نام فایل پشتیبان (بدون پسوند)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color.White,
-                            unfocusedContainerColor = Color.White,
-                            focusedTextColor = textColor,
-                            unfocusedTextColor = textColor
-                        )
-                    )
-                    
-                    Button(
-                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                        onClick = {
-                            if (fileName.isNotBlank()) {
-                                backupJsonToSave = backupJson
-                                try {
-                                    createDocumentLauncher.launch("${fileName}.json")
-                                    showSubtreeBackupPerson = null
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "خطا در فراخوانی ذخیره‌ساز سیستم: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                                }
-                            } else {
-                                Toast.makeText(context, "لطفا ابتدا نام فایل را وارد کنید.", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Save, contentDescription = null, tint = Color.White)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("ذخیره به عنوان فایل (.json) در گوشی", color = Color.White, fontWeight = FontWeight.Bold)
+                if (backupJson == null) {
+                    Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = accentColor)
                     }
-                    
-                    Divider(modifier = Modifier.padding(vertical = 4.dp))
-                    
-                    Text(
-                        text = "روش جایگزین: کپی کردن کد متنی زیر و ذخیره آن:",
-                        fontSize = 11.sp,
-                        color = textColor.copy(alpha = 0.5f)
-                    )
-                    
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(110.dp)
-                            .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
-                            .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
-                            .padding(8.dp)
-                    ) {
-                        androidx.compose.foundation.lazy.LazyColumn {
-                            item {
-                                Text(
-                                    text = backupJson,
-                                    fontSize = 10.sp,
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                    color = Color.DarkGray
-                                )
+                } else {
+                    val currentJson = backupJson!!
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "فایل پشتیبان شامل این عضو (${rootPerson.fullName})، همسر و تمام فرزندان و نوادگان ایشان خواهد بود.",
+                            fontSize = 12.sp,
+                            color = textColor.copy(alpha = 0.7f)
+                        )
+                        
+                        OutlinedTextField(
+                            value = fileName,
+                            onValueChange = { fileName = it },
+                            label = { Text("نام فایل پشتیبان (بدون پسوند)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White,
+                                focusedTextColor = textColor,
+                                unfocusedTextColor = textColor
+                            )
+                        )
+                        
+                        Button(
+                            colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                            onClick = {
+                                if (fileName.isNotBlank()) {
+                                    backupJsonToSave = currentJson
+                                    try {
+                                        createDocumentLauncher.launch("${fileName}.json")
+                                        showSubtreeBackupPerson = null
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "خطا در فراخوانی ذخیره‌ساز سیستم: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "لطفا ابتدا نام فایل را وارد کنید.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Save, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("ذخیره به عنوان فایل (.json) در گوشی", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        
+                        Divider(modifier = Modifier.padding(vertical = 4.dp))
+                        
+                        Text(
+                            text = "روش جایگزین: کپی کردن کد متنی زیر و ذخیره آن:",
+                            fontSize = 11.sp,
+                            color = textColor.copy(alpha = 0.5f)
+                        )
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(110.dp)
+                                .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+                                .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
+                                .padding(8.dp)
+                        ) {
+                            androidx.compose.foundation.lazy.LazyColumn {
+                                item {
+                                    Text(
+                                        text = currentJson,
+                                        fontSize = 10.sp,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        color = Color.DarkGray
+                                    )
+                                }
                             }
                         }
                     }
@@ -3316,10 +3366,11 @@ $databaseError
             },
             confirmButton = {
                 Button(
+                    enabled = backupJson != null,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
                     onClick = {
                         val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val clip = android.content.ClipData.newPlainText("FamilyTreeSubtreeBackup", backupJson)
+                        val clip = android.content.ClipData.newPlainText("FamilyTreeSubtreeBackup", backupJson ?: "")
                         clipboardManager.setPrimaryClip(clip)
                         Toast.makeText(context, "کد پشتیبان عضو با موفقیت کپی شد.", Toast.LENGTH_SHORT).show()
                         showSubtreeBackupPerson = null

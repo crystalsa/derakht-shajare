@@ -10,6 +10,8 @@ import com.example.data.Relationship
 import com.example.utils.RelationshipCalculator
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -841,7 +843,13 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun getBase64Image(filePath: String): String? {
         return try {
-            val file = java.io.File(filePath)
+            val pathToUse = if (filePath.contains("person_original_")) {
+                val croppedPath = filePath.replace("person_original_", "person_cropped_")
+                if (java.io.File(croppedPath).exists()) croppedPath else filePath
+            } else {
+                filePath
+            }
+            val file = java.io.File(pathToUse)
             if (file.exists()) {
                 val bytes = file.readBytes()
                 android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
@@ -854,14 +862,14 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun saveBase64Image(base64Str: String): String? {
+    private fun saveBase64Image(base64Str: String, index: Int = 0): String? {
         return try {
             val bytes = android.util.Base64.decode(base64Str, android.util.Base64.NO_WRAP)
             val directory = java.io.File(getApplication<Application>().filesDir, "photos")
             if (!directory.exists()) {
                 directory.mkdirs()
             }
-            val file = java.io.File(directory, "person_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}.jpg")
+            val file = java.io.File(directory, "person_restored_${System.currentTimeMillis()}_${index}_${java.util.UUID.randomUUID().toString().take(4)}.jpg")
             java.io.FileOutputStream(file).use { fos ->
                 fos.write(bytes)
             }
@@ -872,7 +880,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun exportBackupToJson(groupId: Long? = null): String {
+    suspend fun exportBackupToJson(groupId: Long? = null): String = withContext(Dispatchers.IO) {
         val backupObj = org.json.JSONObject()
         
         // Settings
@@ -927,7 +935,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 put("generation", p.generation)
                 put("groupId", p.groupId ?: org.json.JSONObject.NULL)
                 
-                // Backup photos
+                // Backup photos Base64
                 val photosBase64Arr = org.json.JSONArray()
                 val urisList = p.photoUri?.split('|')?.filter { it.isNotBlank() } ?: emptyList()
                 for (uri in urisList) {
@@ -960,17 +968,21 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         }
         backupObj.put("relationships", relsArr)
         
-        return backupObj.toString(4)
+        backupObj.toString(4)
     }
 
     fun importBackupFromJson(jsonString: String, targetGroupId: Long? = null, onComplete: (Boolean, String) -> Unit) {
-        viewModelScope.launch {
-            val repo = repository ?: return@launch
+        viewModelScope.launch(Dispatchers.IO) {
+            val repo = repository
+            if (repo == null) {
+                withContext(Dispatchers.Main) { onComplete(false, "پایگاه داده هنوز آماده نیست.") }
+                return@launch
+            }
             try {
                 val backupObj = org.json.JSONObject(jsonString)
                 
                 if (!backupObj.has("persons") || !backupObj.has("relationships")) {
-                    onComplete(false, "ساختار فایل پشتیبان نامعتبر است.")
+                    withContext(Dispatchers.Main) { onComplete(false, "ساختار فایل پشتیبان نامعتبر است.") }
                     return@launch
                 }
                 
@@ -1005,6 +1017,8 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     oldToNewGroupIdMap[oldId] = newId
                 }
                 
+                var anyOldDanglingPhotosFound = false
+
                 for (i in 0 until personsArr.length()) {
                     val pObj = personsArr.getJSONObject(i)
                     val oldId = pObj.getLong("id")
@@ -1032,12 +1046,12 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     
                     // Restore photos from Base64
                     var restoredPhotoUri: String? = null
-                    if (pObj.has("photosBase64")) {
+                    if (pObj.has("photosBase64") && pObj.getJSONArray("photosBase64").length() > 0) {
                         val photosBase64Arr = pObj.getJSONArray("photosBase64")
                         val restoredPaths = mutableListOf<String>()
                         for (j in 0 until photosBase64Arr.length()) {
                             val b64 = photosBase64Arr.getString(j)
-                            val savedPath = saveBase64Image(b64)
+                            val savedPath = saveBase64Image(b64, j)
                             if (savedPath != null) {
                                 restoredPaths.add(savedPath)
                             }
@@ -1045,9 +1059,21 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         if (restoredPaths.isNotEmpty()) {
                             restoredPhotoUri = restoredPaths.joinToString("|")
                         }
-                    }
-                    if (restoredPhotoUri == null) {
-                        restoredPhotoUri = originalPhotoUri
+                    } else if (!originalPhotoUri.isNullOrBlank()) {
+                        val urisList = originalPhotoUri.split('|').filter { it.isNotBlank() }
+                        val validLocalPaths = mutableListOf<String>()
+                        for (path in urisList) {
+                            if (java.io.File(path).exists()) {
+                                validLocalPaths.add(path)
+                            } else {
+                                anyOldDanglingPhotosFound = true
+                            }
+                        }
+                        if (validLocalPaths.isNotEmpty()) {
+                            restoredPhotoUri = validLocalPaths.joinToString("|")
+                        } else {
+                            restoredPhotoUri = null
+                        }
                     }
                     
                     val newPersonId = repo.insertPerson(
@@ -1099,9 +1125,18 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     setSelectedGroupId(firstNewGroup)
                 }
                 
-                onComplete(true, "بازگردانی و ادغام فایل پشتیبان با موفقیت انجام شد.")
+                val msg = if (anyOldDanglingPhotosFound) {
+                    "بازگردانی و ادغام فایل پشتیبان با موفقیت انجام شد.\n(توجه: این بکاپ قدیمی است و شامل عکس‌ها نمی‌شود)"
+                } else {
+                    "بازگردانی و ادغام فایل پشتیبان با موفقیت انجام شد."
+                }
+                withContext(Dispatchers.Main) {
+                    onComplete(true, msg)
+                }
             } catch (e: Exception) {
-                onComplete(false, "خطا در پردازش فایل پشتیبان: ${e.localizedMessage}")
+                withContext(Dispatchers.Main) {
+                    onComplete(false, "خطا در پردازش فایل پشتیبان: ${e.localizedMessage}")
+                }
             }
         }
     }
@@ -1149,7 +1184,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         return Pair(subtreePersons, subtreeRelationships)
     }
 
-    fun exportSubtreeBackupToJson(rootPersonId: Long): String {
+    suspend fun exportSubtreeBackupToJson(rootPersonId: Long): String = withContext(Dispatchers.IO) {
         val backupObj = org.json.JSONObject()
         backupObj.put("isSubtreeBackup", true)
         
@@ -1205,17 +1240,21 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         }
         backupObj.put("relationships", relsArr)
         
-        return backupObj.toString(4)
+        backupObj.toString(4)
     }
 
     fun importSubtreeBackupFromJson(jsonString: String, onComplete: (Boolean, String, Long?) -> Unit) {
-        viewModelScope.launch {
-            val repo = repository ?: return@launch
+        viewModelScope.launch(Dispatchers.IO) {
+            val repo = repository
+            if (repo == null) {
+                withContext(Dispatchers.Main) { onComplete(false, "پایگاه داده هنوز آماده نیست.", null) }
+                return@launch
+            }
             try {
                 val backupObj = org.json.JSONObject(jsonString)
                 
                 if (!backupObj.has("persons") || !backupObj.has("relationships")) {
-                    onComplete(false, "ساختار فایل پشتیبان نامعتبر است.", null)
+                    withContext(Dispatchers.Main) { onComplete(false, "ساختار فایل پشتیبان نامعتبر است.", null) }
                     return@launch
                 }
                 
@@ -1240,7 +1279,9 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
                 if (minGen == Int.MAX_VALUE) minGen = 0
- 
+
+                var anyOldDanglingPhotosFound = false
+
                 for (i in 0 until personsArr.length()) {
                     val pObj = personsArr.getJSONObject(i)
                     val oldId = pObj.getLong("id")
@@ -1262,12 +1303,12 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     
                     // Restore photos from Base64
                     var restoredPhotoUri: String? = null
-                    if (pObj.has("photosBase64")) {
+                    if (pObj.has("photosBase64") && pObj.getJSONArray("photosBase64").length() > 0) {
                         val photosBase64Arr = pObj.getJSONArray("photosBase64")
                         val restoredPaths = mutableListOf<String>()
                         for (j in 0 until photosBase64Arr.length()) {
                             val b64 = photosBase64Arr.getString(j)
-                            val savedPath = saveBase64Image(b64)
+                            val savedPath = saveBase64Image(b64, j)
                             if (savedPath != null) {
                                 restoredPaths.add(savedPath)
                             }
@@ -1275,11 +1316,23 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         if (restoredPaths.isNotEmpty()) {
                             restoredPhotoUri = restoredPaths.joinToString("|")
                         }
+                    } else if (!originalPhotoUri.isNullOrBlank()) {
+                        val urisList = originalPhotoUri.split('|').filter { it.isNotBlank() }
+                        val validLocalPaths = mutableListOf<String>()
+                        for (path in urisList) {
+                            if (java.io.File(path).exists()) {
+                                validLocalPaths.add(path)
+                            } else {
+                                anyOldDanglingPhotosFound = true
+                            }
+                        }
+                        if (validLocalPaths.isNotEmpty()) {
+                            restoredPhotoUri = validLocalPaths.joinToString("|")
+                        } else {
+                            restoredPhotoUri = null
+                        }
                     }
-                    if (restoredPhotoUri == null) {
-                        restoredPhotoUri = originalPhotoUri
-                    }
- 
+
                     val newPersonId = repo.insertPerson(
                         com.example.data.Person(
                             id = 0, // Let Room auto-generate a new ID
@@ -1325,9 +1378,18 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 // Set the active selected group to the new group so the user is immediately taken to it
                 setSelectedGroupId(newGroupId)
                 
-                onComplete(true, "بکاپ با موفقیت در گروه جدید «$newGroupName» بازگردانی شد.", newGroupId)
+                val msg = if (anyOldDanglingPhotosFound) {
+                    "بکاپ با موفقیت در گروه جدید «$newGroupName» بازگردانی شد.\n(توجه: این بکاپ قدیمی است و شامل عکس‌ها نمی‌شود)"
+                } else {
+                    "بکاپ با موفقیت در گروه جدید «$newGroupName» بازگردانی شد."
+                }
+                withContext(Dispatchers.Main) {
+                    onComplete(true, msg, newGroupId)
+                }
             } catch (e: Exception) {
-                onComplete(false, "خطا در بازگردانی بکاپ: ${e.localizedMessage}", null)
+                withContext(Dispatchers.Main) {
+                    onComplete(false, "خطا در بازگردانی بکاپ: ${e.localizedMessage}", null)
+                }
             }
         }
     }
