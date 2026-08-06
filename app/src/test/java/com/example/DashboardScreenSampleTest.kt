@@ -2,7 +2,7 @@ package com.example
 
 import org.junit.Test
 import com.example.data.*
-import com.example.ui.screens.computeTreeLayoutPositions
+import com.example.ui.tree.computeTreeLayoutPositions
 import androidx.compose.ui.graphics.Color
 
 class DashboardScreenSampleTest {
