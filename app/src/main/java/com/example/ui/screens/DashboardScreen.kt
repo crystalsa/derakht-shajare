@@ -212,6 +212,8 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     var personForPhotoEdit by remember { mutableStateOf<Person?>(null) }
     var showFullPhotoDialog by remember { mutableStateOf<Person?>(null) }
 
+    val coroutineScope = rememberCoroutineScope()
+
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri ->
@@ -225,13 +227,20 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
         contract = androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri != null) {
-            try {
-                context.contentResolver.openOutputStream(uri)?.use { os ->
-                    os.write(backupJsonToSave.toByteArray(Charsets.UTF_8))
+            val jsonToWrite = backupJsonToSave
+            coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { os ->
+                        os.write(jsonToWrite.toByteArray(Charsets.UTF_8))
+                    }
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(context, "فایل پشتیبان با موفقیت در گوشی ذخیره شد.", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(context, "خطا در ذخیره فایل: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                    }
                 }
-                Toast.makeText(context, "فایل پشتیبان با موفقیت در گوشی ذخیره شد.", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(context, "خطا در ذخیره فایل: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -240,32 +249,38 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
         contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            try {
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    val jsonText = inputStream.bufferedReader().use { it.readText() }
-                    if (isRestoringSubtree) {
-                        if (selectedGroupId == null) {
-                            Toast.makeText(context, "جهت بازیابی بکاپ عضو، ابتدا باید یک گروه فامیلی ساخته و انتخاب کرده باشید.", Toast.LENGTH_LONG).show()
-                            isRestoringSubtree = false
-                            return@rememberLauncherForActivityResult
-                        }
-                        viewModel.importSubtreeBackupFromJson(jsonText) { success, msg, newGroupId ->
-                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                            if (success) {
-                                if (newGroupId != null) {
-                                    viewModel.setSelectedGroupId(newGroupId)
-                                }
-                                showSubtreeRestoreDialog = false
+            coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val jsonText = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        inputStream.bufferedReader().use { it.readText() }
+                    } ?: ""
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        if (isRestoringSubtree) {
+                            if (selectedGroupId == null) {
+                                Toast.makeText(context, "جهت بازیابی بکاپ عضو، ابتدا باید یک گروه فامیلی ساخته و انتخاب کرده باشید.", Toast.LENGTH_LONG).show()
+                                isRestoringSubtree = false
+                                return@withContext
                             }
-                            isRestoringSubtree = false
+                            viewModel.importSubtreeBackupFromJson(jsonText) { success, msg, newGroupId ->
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                if (success) {
+                                    if (newGroupId != null) {
+                                        viewModel.setSelectedGroupId(newGroupId)
+                                    }
+                                    showSubtreeRestoreDialog = false
+                                }
+                                isRestoringSubtree = false
+                            }
+                        } else {
+                            onRestoreBackupText(jsonText)
                         }
-                    } else {
-                        onRestoreBackupText(jsonText)
+                    }
+                } catch (e: Exception) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        Toast.makeText(context, "خطا در خواندن فایل پشتیبان: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                        isRestoringSubtree = false
                     }
                 }
-            } catch (e: Exception) {
-                Toast.makeText(context, "خطا در خواندن فایل پشتیبان: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                isRestoringSubtree = false
             }
         } else {
             isRestoringSubtree = false
@@ -2780,14 +2795,6 @@ $databaseError
                 backupFileNameInput = "بکاپ_گروه_${g.name}"
                 showBackupDialog = true
                 groupToEdit = null
-            },
-            onRestoreGroup = { g ->
-                try {
-                    importFileLauncher.launch("*/*")
-                    groupToEdit = null
-                } catch (e: Exception) {
-                    Toast.makeText(context, "خطا در اجرای انتخاب‌گر فایل: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                }
             }
         )
     }

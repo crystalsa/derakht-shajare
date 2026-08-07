@@ -247,7 +247,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "تعداد کل اعضای خانواده",
-                                    value = "$totalCount نفر",
+                                    value = "${totalCount.toFarsiNumbers()} نفر",
                                     icon = "👥",
                                     accentColor = accentColor,
                                     textColor = textColor,
@@ -266,7 +266,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "تعداد اعضای مذکر (آقایان)",
-                                    value = "$maleCount نفر",
+                                    value = "${maleCount.toFarsiNumbers()} نفر",
                                     icon = "👨",
                                     accentColor = accentColor,
                                     textColor = textColor,
@@ -285,7 +285,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "تعداد اعضای مونث (بانوان)",
-                                    value = "$femaleCount نفر",
+                                    value = "${femaleCount.toFarsiNumbers()} نفر",
                                     icon = "👩",
                                     accentColor = accentColor,
                                     textColor = textColor,
@@ -304,7 +304,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "تعداد نسل‌ها در شجره‌نامه",
-                                    value = "$totalGenerations نسل",
+                                    value = "${totalGenerations.toFarsiNumbers()} نسل",
                                     icon = "🧬",
                                     accentColor = accentColor,
                                     textColor = textColor
@@ -317,7 +317,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "تعداد عروس‌های خانواده",
-                                    value = "${brides.size} نفر",
+                                    value = "${brides.size.toFarsiNumbers()} نفر",
                                     icon = "👰",
                                     accentColor = accentColor,
                                     textColor = textColor,
@@ -336,7 +336,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "تعداد دامادهای خانواده",
-                                    value = "${grooms.size} نفر",
+                                    value = "${grooms.size.toFarsiNumbers()} نفر",
                                     icon = "🤵",
                                     accentColor = accentColor,
                                     textColor = textColor,
@@ -355,7 +355,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "تعداد فرزندان (نسل اول)",
-                                    value = "${children.size} نفر",
+                                    value = "${children.size.toFarsiNumbers()} نفر",
                                     icon = "👶",
                                     accentColor = accentColor,
                                     textColor = textColor,
@@ -374,7 +374,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "تعداد نوه‌ها (نسل دوم)",
-                                    value = "${grandchildren.size} نفر",
+                                    value = "${grandchildren.size.toFarsiNumbers()} نفر",
                                     icon = "🪁",
                                     accentColor = accentColor,
                                     textColor = textColor,
@@ -393,7 +393,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "تعداد نبیره‌ها (نسل سوم)",
-                                    value = "${greatGrandchildren.size} نفر",
+                                    value = "${greatGrandchildren.size.toFarsiNumbers()} نفر",
                                     icon = "🧸",
                                     accentColor = accentColor,
                                     textColor = textColor,
@@ -412,7 +412,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "تعداد ندیده‌ها (نسل چهارم)",
-                                    value = "${greatGreatGrandchildren.size} نفر",
+                                    value = "${greatGreatGrandchildren.size.toFarsiNumbers()} نفر",
                                     icon = "🐣",
                                     accentColor = accentColor,
                                     textColor = textColor,
@@ -431,7 +431,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "اعضای در قید حیات",
-                                    value = "$livingCount نفر",
+                                    value = "${livingCount.toFarsiNumbers()} نفر",
                                     icon = "🌱",
                                     accentColor = accentColor,
                                     textColor = textColor,
@@ -450,7 +450,7 @@ fun FamilyOverviewStatsDialog(
                             item {
                                 StatRowItem(
                                     title = "تعداد درگذشتگان (آسمانی شده)",
-                                    value = "$deceasedCount نفر",
+                                    value = "${deceasedCount.toFarsiNumbers()} نفر",
                                     icon = "🕯️",
                                     accentColor = accentColor,
                                     textColor = textColor,
@@ -467,7 +467,7 @@ fun FamilyOverviewStatsDialog(
                         // 11. Average age
                         if (averageAge != null) {
                             item {
-                                StatRowItem(title = "میانگین سن اعضای خانواده", value = "$averageAge سال", icon = "📅", accentColor = accentColor, textColor = textColor)
+                                StatRowItem(title = "میانگین سن اعضای خانواده", value = "${averageAge.toFarsiNumbers()} سال", icon = "📅", accentColor = accentColor, textColor = textColor)
                             }
                         }
 

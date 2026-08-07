@@ -849,13 +849,47 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
             } else {
                 filePath
             }
-            val file = java.io.File(pathToUse)
-            if (file.exists()) {
-                val bytes = file.readBytes()
+
+            val bitmap: android.graphics.Bitmap? = if (pathToUse.startsWith("content://") || pathToUse.startsWith("file://")) {
+                val uri = android.net.Uri.parse(pathToUse)
+                getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+                    android.graphics.BitmapFactory.decodeStream(input)
+                }
+            } else {
+                val file = java.io.File(pathToUse)
+                if (file.exists()) {
+                    android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+                } else null
+            }
+
+            if (bitmap != null) {
+                // Downscale image if larger than 800x800 to keep backup size compact and prevent memory crashes
+                val maxDim = 800
+                val width = bitmap.width
+                val height = bitmap.height
+                val scaledBitmap = if (width > maxDim || height > maxDim) {
+                    val scale = maxDim.toFloat() / Math.max(width, height)
+                    val newW = (width * scale).toInt().coerceAtLeast(1)
+                    val newH = (height * scale).toInt().coerceAtLeast(1)
+                    android.graphics.Bitmap.createScaledBitmap(bitmap, newW, newH, true)
+                } else {
+                    bitmap
+                }
+
+                val baos = java.io.ByteArrayOutputStream()
+                scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, baos)
+                val bytes = baos.toByteArray()
+                if (scaledBitmap != bitmap) {
+                    scaledBitmap.recycle()
+                }
+                bitmap.recycle()
                 android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
             } else {
                 null
             }
+        } catch (e: OutOfMemoryError) {
+            e.printStackTrace()
+            null
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -881,94 +915,99 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     suspend fun exportBackupToJson(groupId: Long? = null): String = withContext(Dispatchers.IO) {
-        val backupObj = org.json.JSONObject()
-        
-        // Settings
-        if (groupId == null) {
-            val settingsObj = org.json.JSONObject().apply {
-                put("treeLayout", treeLayout.value)
-                put("treeTheme", treeTheme.value)
-            }
-            backupObj.put("settings", settingsObj)
-        }
-        
-        // Groups
-        val groupsArr = org.json.JSONArray()
-        val groupsToBackup = if (groupId != null) {
-            allGroups.value.filter { it.id == groupId }
-        } else {
-            allGroups.value
-        }
-        for (g in groupsToBackup) {
-            val gObj = org.json.JSONObject().apply {
-                put("id", g.id)
-                put("name", g.name)
-                put("description", g.description ?: org.json.JSONObject.NULL)
-            }
-            groupsArr.put(gObj)
-        }
-        backupObj.put("groups", groupsArr)
-        
-        // Persons
-        val personsArr = org.json.JSONArray()
-        val personsToBackup = if (groupId != null) {
-            allPersons.value.filter { it.groupId == groupId }
-        } else {
-            allPersons.value
-        }
-        val personIdsToBackup = personsToBackup.map { it.id }.toSet()
-        
-        for (p in personsToBackup) {
-            val pObj = org.json.JSONObject().apply {
-                put("id", p.id)
-                put("firstName", p.firstName)
-                put("lastName", p.lastName)
-                put("gender", p.gender)
-                put("birthDate", p.birthDate ?: org.json.JSONObject.NULL)
-                put("birthPlace", p.birthPlace ?: org.json.JSONObject.NULL)
-                put("deathDate", p.deathDate ?: org.json.JSONObject.NULL)
-                put("deathPlace", p.deathPlace ?: org.json.JSONObject.NULL)
-                put("isDeceased", p.isDeceased)
-                put("occupation", p.occupation ?: org.json.JSONObject.NULL)
-                put("biography", p.biography ?: org.json.JSONObject.NULL)
-                put("photoUri", p.photoUri ?: org.json.JSONObject.NULL)
-                put("generation", p.generation)
-                put("groupId", p.groupId ?: org.json.JSONObject.NULL)
-                
-                // Backup photos Base64
-                val photosBase64Arr = org.json.JSONArray()
-                val urisList = p.photoUri?.split('|')?.filter { it.isNotBlank() } ?: emptyList()
-                for (uri in urisList) {
-                    val b64 = getBase64Image(uri)
-                    if (b64 != null) {
-                        photosBase64Arr.put(b64)
-                    }
+        try {
+            val backupObj = org.json.JSONObject()
+            
+            // Settings
+            if (groupId == null) {
+                val settingsObj = org.json.JSONObject().apply {
+                    put("treeLayout", treeLayout.value)
+                    put("treeTheme", treeTheme.value)
                 }
-                put("photosBase64", photosBase64Arr)
+                backupObj.put("settings", settingsObj)
             }
-            personsArr.put(pObj)
-        }
-        backupObj.put("persons", personsArr)
-        
-        // Relationships
-        val relsArr = org.json.JSONArray()
-        val relsToBackup = if (groupId != null) {
-            allRelationships.value.filter { r -> personIdsToBackup.contains(r.personId1) && personIdsToBackup.contains(r.personId2) }
-        } else {
-            allRelationships.value
-        }
-        for (r in relsToBackup) {
-            val rObj = org.json.JSONObject().apply {
-                put("id", r.id)
-                put("personId1", r.personId1)
-                put("personId2", r.personId2)
-                put("type", r.type)
+            
+            // Groups
+            val groupsArr = org.json.JSONArray()
+            val groupsToBackup = if (groupId != null) {
+                allGroups.value.filter { it.id == groupId }
+            } else {
+                allGroups.value.toList()
             }
-            relsArr.put(rObj)
+            for (g in groupsToBackup) {
+                val gObj = org.json.JSONObject().apply {
+                    put("id", g.id)
+                    put("name", g.name)
+                    put("description", g.description ?: org.json.JSONObject.NULL)
+                }
+                groupsArr.put(gObj)
+            }
+            backupObj.put("groups", groupsArr)
+            
+            // Persons
+            val personsArr = org.json.JSONArray()
+            val personsToBackup = if (groupId != null) {
+                allPersons.value.filter { it.groupId == groupId }
+            } else {
+                allPersons.value.toList()
+            }
+            val personIdsToBackup = personsToBackup.map { it.id }.toSet()
+            
+            for (p in personsToBackup) {
+                val pObj = org.json.JSONObject().apply {
+                    put("id", p.id)
+                    put("firstName", p.firstName)
+                    put("lastName", p.lastName)
+                    put("gender", p.gender)
+                    put("birthDate", p.birthDate ?: org.json.JSONObject.NULL)
+                    put("birthPlace", p.birthPlace ?: org.json.JSONObject.NULL)
+                    put("deathDate", p.deathDate ?: org.json.JSONObject.NULL)
+                    put("deathPlace", p.deathPlace ?: org.json.JSONObject.NULL)
+                    put("isDeceased", p.isDeceased)
+                    put("occupation", p.occupation ?: org.json.JSONObject.NULL)
+                    put("biography", p.biography ?: org.json.JSONObject.NULL)
+                    put("photoUri", p.photoUri ?: org.json.JSONObject.NULL)
+                    put("generation", p.generation)
+                    put("groupId", p.groupId ?: org.json.JSONObject.NULL)
+                    
+                    // Backup photos Base64
+                    val photosBase64Arr = org.json.JSONArray()
+                    val urisList = p.photoUri?.split('|')?.filter { it.isNotBlank() } ?: emptyList()
+                    for (uri in urisList) {
+                        val b64 = getBase64Image(uri)
+                        if (b64 != null) {
+                            photosBase64Arr.put(b64)
+                        }
+                    }
+                    put("photosBase64", photosBase64Arr)
+                }
+                personsArr.put(pObj)
+            }
+            backupObj.put("persons", personsArr)
+            
+            // Relationships
+            val relsArr = org.json.JSONArray()
+            val relsToBackup = if (groupId != null) {
+                allRelationships.value.filter { r -> personIdsToBackup.contains(r.personId1) && personIdsToBackup.contains(r.personId2) }
+            } else {
+                allRelationships.value.toList()
+            }
+            for (r in relsToBackup) {
+                val rObj = org.json.JSONObject().apply {
+                    put("id", r.id)
+                    put("personId1", r.personId1)
+                    put("personId2", r.personId2)
+                    put("type", r.type)
+                }
+                relsArr.put(rObj)
+            }
+            backupObj.put("relationships", relsArr)
+            
+            backupObj.toString(4)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "{}"
         }
-        backupObj.put("relationships", relsArr)
-        
-        backupObj.toString(4)
     }
 
     fun importBackupFromJson(jsonString: String, targetGroupId: Long? = null, onComplete: (Boolean, String) -> Unit) {

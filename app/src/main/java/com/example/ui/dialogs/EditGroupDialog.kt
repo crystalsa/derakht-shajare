@@ -139,33 +139,16 @@ fun EditGroupDialog(
                     color = accentColor
                 )
                 
-                Row(
+                Button(
+                    onClick = { onBackupGroup(group) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE8F5E9), contentColor = Color(0xFF2E7D32)),
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(vertical = 10.dp),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Button(
-                        onClick = { onBackupGroup(group) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE8F5E9), contentColor = Color(0xFF2E7D32)),
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 8.dp),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(Icons.Default.Save, contentDescription = null, tint = Color(0xFF2E7D32))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("تهیه بکاپ گروه", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                    
-                    Button(
-                        onClick = { onRestoreGroup(group) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE8F5E9), contentColor = Color(0xFF2E7D32)),
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 8.dp),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(Icons.Default.Publish, contentDescription = null, tint = Color(0xFF2E7D32))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("بازگردانی بکاپ", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
+                    Icon(Icons.Default.Save, contentDescription = null, tint = Color(0xFF2E7D32))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("تهیه فایل پشتیبان گروه", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 
                 Divider(modifier = Modifier.padding(vertical = 4.dp))

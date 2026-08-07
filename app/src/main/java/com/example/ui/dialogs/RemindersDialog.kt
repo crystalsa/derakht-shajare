@@ -127,7 +127,7 @@ fun RemindersDialog(
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        if (event.daysRemaining == 0) "امروز" else "${event.daysRemaining} روز",
+                                        if (event.daysRemaining == 0) "امروز" else "${event.daysRemaining.toFarsiNumbers()} روز",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 10.sp,
                                         color = Color.Black

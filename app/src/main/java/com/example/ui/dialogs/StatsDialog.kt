@@ -109,7 +109,7 @@ fun StatsDialog(
                     ) {
                         Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("کل جمعیت", fontSize = 11.sp, color = textColor.copy(alpha = 0.7f))
-                            Text(stats.totalCount.toString(), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = accentColor)
+                            Text(stats.totalCount.toFarsiNumbers(), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = accentColor)
                         }
                     }
                     Card(
@@ -118,7 +118,7 @@ fun StatsDialog(
                     ) {
                         Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("در قید حیات", fontSize = 11.sp, color = textColor.copy(alpha = 0.7f))
-                            Text(stats.livingCount.toString(), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = accentColor)
+                            Text(stats.livingCount.toFarsiNumbers(), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = accentColor)
                         }
                     }
                     Card(
@@ -127,7 +127,7 @@ fun StatsDialog(
                     ) {
                         Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("درگذشتگان", fontSize = 11.sp, color = textColor.copy(alpha = 0.7f))
-                            Text(stats.deceasedCount.toString(), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            Text(stats.deceasedCount.toFarsiNumbers(), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                         }
                     }
                 }
@@ -156,8 +156,8 @@ fun StatsDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("آقایان: ${stats.malesCount} نفر (${(malePercent * 100).toInt()}٪)", fontSize = 11.sp, color = Color(0xFF1565C0))
-                        Text("بانوان: ${stats.femalesCount} نفر (${((1 - malePercent) * 100).toInt()}٪)", fontSize = 11.sp, color = Color(0xFFC2185B))
+                        Text("آقایان: ${stats.malesCount.toFarsiNumbers()} نفر (${(malePercent * 100).toInt().toFarsiNumbers()}٪)", fontSize = 11.sp, color = Color(0xFF1565C0))
+                        Text("بانوان: ${stats.femalesCount.toFarsiNumbers()} نفر (${((1 - malePercent) * 100).toInt().toFarsiNumbers()}٪)", fontSize = 11.sp, color = Color(0xFFC2185B))
                     }
                 }
 
@@ -167,11 +167,11 @@ fun StatsDialog(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         Text("میانگین سن افراد زنده:", fontSize = 12.sp, color = textColor)
-                        Text("${stats.avgLivingAge} سال", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
+                        Text("${stats.avgLivingAge.toFarsiNumbers()} سال", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
                     }
                     Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         Text("میانگین سن فوت شدگان:", fontSize = 12.sp, color = textColor)
-                        Text("${stats.avgDeceasedAge} سال", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
+                        Text("${stats.avgDeceasedAge.toFarsiNumbers()} سال", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = textColor)
                     }
                     Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         Text("پرتکرارترین نام پسر:", fontSize = 12.sp, color = textColor)

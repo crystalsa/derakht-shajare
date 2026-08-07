@@ -1,5 +1,6 @@
 package com.example.ui.dialogs
 
+import com.example.ui.common.toFarsiNumbers
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -100,7 +101,7 @@ fun <T> WheelColumn(
                 ) {
                     if (item != null) {
                         Text(
-                            text = labelProvider(item),
+                            text = labelProvider(item).toFarsiNumbers(),
                             fontSize = if (isSelected) 15.sp else 12.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelected) Color(0xFF1B5E20) else Color.Gray,
@@ -214,7 +215,7 @@ fun InlineFarsiDatePicker(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        val dayDisplay = if (selectedDayIndex == 0) "نامشخص" else selectedDayIndex.toString()
+                        val dayDisplay = if (selectedDayIndex == 0) "نامشخص" else selectedDayIndex.toFarsiNumbers()
                         Text(dayDisplay, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21))
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF2E7D32))
                     }
@@ -239,7 +240,7 @@ fun InlineFarsiDatePicker(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             items(maxDays + 1) { index ->
-                                val dayVal = if (index == 0) "نامشخص" else index.toString()
+                                val dayVal = if (index == 0) "نامشخص" else index.toFarsiNumbers()
                                 DropdownMenuItem(
                                     text = { Text(dayVal, fontSize = 12.sp, fontWeight = if (index == selectedDayIndex) FontWeight.Bold else FontWeight.Normal, color = Color(0xFF112E21)) },
                                     onClick = {
@@ -313,7 +314,7 @@ fun InlineFarsiDatePicker(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(selectedYear.toString(), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21))
+                        Text(selectedYear.toFarsiNumbers(), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21))
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF2E7D32))
                     }
                 }
@@ -340,7 +341,7 @@ fun InlineFarsiDatePicker(
                             items(years.size) { index ->
                                 val yr = years[index]
                                 DropdownMenuItem(
-                                    text = { Text(yr.toString(), fontSize = 12.sp, fontWeight = if (yr == selectedYear) FontWeight.Bold else FontWeight.Normal, color = Color(0xFF112E21)) },
+                                    text = { Text(yr.toFarsiNumbers(), fontSize = 12.sp, fontWeight = if (yr == selectedYear) FontWeight.Bold else FontWeight.Normal, color = Color(0xFF112E21)) },
                                     onClick = {
                                         selectedYear = yr
                                         yearMenuExpanded = false

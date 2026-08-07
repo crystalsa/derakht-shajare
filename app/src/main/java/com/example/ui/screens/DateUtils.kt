@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import java.util.Calendar
+import com.example.ui.common.toFarsiNumbers
 
 fun getCurrentJalaliYear(): Int {
     val cal = Calendar.getInstance()
@@ -78,7 +79,7 @@ fun formatLifeDates(birthDate: String?, deathDate: String?, isDeceased: Boolean,
     val age = calculateAge(birthDate, if (isDeceased) deathDate else null, currentYear)
     val ageStr = if (age != null) " ($age ساله)" else ""
     
-    return if (isDeceased) {
+    val result = if (isDeceased) {
         val dStr = if (!deathDate.isNullOrBlank()) deathDate else "؟"
         "\u202D$bStr - $dStr\u202C$ageStr"
     } else {
@@ -86,6 +87,7 @@ fun formatLifeDates(birthDate: String?, deathDate: String?, isDeceased: Boolean,
              "\u202D$bStr\u202C$ageStr"
         } else ""
     }
+    return result.toFarsiNumbers()
 }
 
 fun formatLifeYearsOnlyLTR(birthDate: String?, deathDate: String?, isDeceased: Boolean): String {
@@ -96,7 +98,7 @@ fun formatLifeYearsOnlyLTR(birthDate: String?, deathDate: String?, isDeceased: B
     
     val bYear = extractYear(birthDate)
     
-    return if (isDeceased) {
+    val result = if (isDeceased) {
         val dYear = extractYear(deathDate)
         "\u202D$bYear - $dYear\u202C"
     } else {
@@ -104,4 +106,5 @@ fun formatLifeYearsOnlyLTR(birthDate: String?, deathDate: String?, isDeceased: B
              "متولد \u202D$bYear\u202C"
         } else ""
     }
+    return result.toFarsiNumbers()
 }

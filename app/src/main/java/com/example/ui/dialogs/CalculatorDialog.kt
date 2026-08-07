@@ -158,7 +158,7 @@ fun CalculatorDialog(
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text("نسبت فامیلی:", fontSize = 11.sp, color = textColor.copy(alpha = 0.7f))
                             Text(
-                                computed,
+                                computed.toFarsiNumbers(),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
                                 color = textColor
