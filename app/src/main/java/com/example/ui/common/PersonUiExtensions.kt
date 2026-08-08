@@ -13,10 +13,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Visibility
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -275,7 +273,7 @@ fun StatRowItem(
                     )
                     if (onToggleExpand != null && !members.isNullOrEmpty()) {
                         Icon(
-                            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            imageVector = if (isExpanded) TablerIcons.ChevronUp else TablerIcons.ChevronDown,
                             contentDescription = if (isExpanded) "بستن" else "باز کردن",
                             tint = textColor.copy(alpha = 0.6f),
                             modifier = Modifier.size(20.dp)
@@ -364,7 +362,7 @@ fun StatRowItem(
                                     .background(accentColor.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Visibility,
+                                    imageVector = TablerIcons.Eye,
                                     contentDescription = "مشاهده جزئیات",
                                     tint = accentColor,
                                     modifier = Modifier.size(16.dp)

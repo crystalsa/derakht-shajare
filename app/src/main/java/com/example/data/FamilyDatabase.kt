@@ -9,7 +9,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import java.io.File
 
-@Database(entities = [Person::class, Relationship::class, FamilyGroup::class], version = 3, exportSchema = false)
+@Database(entities = [Person::class, Relationship::class, FamilyGroup::class, FamilyFolder::class], version = 4, exportSchema = false)
 abstract class FamilyDatabase : RoomDatabase() {
     abstract fun familyDao(): FamilyDao
 
@@ -34,6 +34,13 @@ abstract class FamilyDatabase : RoomDatabase() {
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `family_groups` ADD COLUMN `displayOrder` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `family_folders` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `parentId` INTEGER, `displayOrder` INTEGER NOT NULL DEFAULT 0)")
+                db.execSQL("ALTER TABLE `family_groups` ADD COLUMN `folderId` INTEGER")
             }
         }
 
@@ -71,7 +78,7 @@ abstract class FamilyDatabase : RoomDatabase() {
                 FamilyDatabase::class.java,
                 "family_tree_database"
             )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
         }
     }

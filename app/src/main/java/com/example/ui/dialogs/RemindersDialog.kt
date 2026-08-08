@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -111,7 +113,7 @@ fun RemindersDialog(
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        if (event.type == "Birthday") Icons.Default.Cake else Icons.Default.Cancel,
+                                        if (event.type == "Birthday") TablerIcons.Bell else TablerIcons.Calendar,
                                         contentDescription = null,
                                         tint = if (event.type == "Birthday") Color(0xFF4CAF50) else Color.DarkGray
                                     )

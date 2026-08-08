@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -211,7 +213,7 @@ fun FamilyOverviewStatsDialog(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.Analytics,
+                                imageVector = TablerIcons.ChartBar,
                                 contentDescription = null,
                                 tint = accentColor,
                                 modifier = Modifier.size(28.dp)
@@ -226,7 +228,7 @@ fun FamilyOverviewStatsDialog(
                         }
                         IconButton(onClick = onDismiss) {
                             Icon(
-                                imageVector = Icons.Default.Close,
+                                imageVector = TablerIcons.X,
                                 contentDescription = "بستن",
                                 tint = textColor
                             )

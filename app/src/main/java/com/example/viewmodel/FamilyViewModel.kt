@@ -29,6 +29,12 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     private val _allGroups = MutableStateFlow<List<com.example.data.FamilyGroup>>(emptyList())
     val allGroups = _allGroups.asStateFlow()
     
+    private val _allFolders = MutableStateFlow<List<com.example.data.FamilyFolder>>(emptyList())
+    val allFolders = _allFolders.asStateFlow()
+
+    private val _currentFolderId = MutableStateFlow<Long?>(null) // null = root level folder
+    val currentFolderId = _currentFolderId.asStateFlow()
+    
     private val _isDatabaseReady = MutableStateFlow(false)
     val isDatabaseReady = _isDatabaseReady.asStateFlow()
     
@@ -88,6 +94,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 launch { repo.allPersons.collect { _allPersons.value = it } }
                 launch { repo.allRelationships.collect { _allRelationships.value = it } }
                 launch { repo.allGroups.collect { _allGroups.value = it } }
+                launch { repo.allFolders.collect { _allFolders.value = it } }
                 
                 _isDatabaseReady.value = true
             } catch (e: Exception) {
@@ -366,6 +373,185 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 _selectedGroupId.value = null
             }
             repo.deleteGroup(group)
+        }
+    }
+
+    // --- Folder Operations ---
+    fun setCurrentFolderId(folderId: Long?) {
+        _currentFolderId.value = folderId
+    }
+
+    fun addFolder(name: String, parentId: Long? = _currentFolderId.value, onComplete: (Long) -> Unit = {}) {
+        viewModelScope.launch {
+            val repo = repository ?: return@launch
+            val maxOrder = allFolders.value.filter { it.parentId == parentId }.map { it.displayOrder }.maxOrNull() ?: 0
+            val newFolder = com.example.data.FamilyFolder(name = name, parentId = parentId, displayOrder = maxOrder + 1)
+            val id = repo.insertFolder(newFolder)
+            onComplete(id)
+        }
+    }
+
+    fun updateFolder(folder: com.example.data.FamilyFolder) {
+        viewModelScope.launch {
+            val repo = repository ?: return@launch
+            repo.updateFolder(folder)
+        }
+    }
+
+    fun isFolderEmpty(folderId: Long): Boolean {
+        val hasSubfolders = allFolders.value.any { it.parentId == folderId }
+        val hasGroups = allGroups.value.any { it.folderId == folderId }
+        return !hasSubfolders && !hasGroups
+    }
+
+    fun getFolderContentCounts(folderId: Long): Pair<Int, Int> {
+        val subfolderCount = allFolders.value.count { it.parentId == folderId }
+        val groupCount = allGroups.value.count { it.folderId == folderId }
+        return Pair(subfolderCount, groupCount)
+    }
+
+    fun getFolderBreadcrumbs(folderId: Long?): List<com.example.data.FamilyFolder> {
+        val result = mutableListOf<com.example.data.FamilyFolder>()
+        var currentId = folderId
+        val foldersMap = allFolders.value.associateBy { it.id }
+        val visited = mutableSetOf<Long>()
+        while (currentId != null && !visited.contains(currentId)) {
+            visited.add(currentId)
+            val folder = foldersMap[currentId] ?: break
+            result.add(0, folder)
+            currentId = folder.parentId
+        }
+        return result
+    }
+
+    fun deleteFolder(folder: com.example.data.FamilyFolder) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val repo = repository ?: return@launch
+            suspend fun deleteRecursively(fId: Long) {
+                val subfolders = allFolders.value.filter { it.parentId == fId }
+                for (sf in subfolders) {
+                    deleteRecursively(sf.id)
+                    repo.deleteFolder(sf)
+                }
+                val groupsInFolder = allGroups.value.filter { it.folderId == fId }
+                for (g in groupsInFolder) {
+                    if (_selectedGroupId.value == g.id) {
+                        _selectedGroupId.value = null
+                    }
+                    repo.deleteGroup(g)
+                }
+            }
+
+            deleteRecursively(folder.id)
+            repo.deleteFolder(folder)
+
+            if (_currentFolderId.value == folder.id) {
+                _currentFolderId.value = folder.parentId
+            }
+        }
+    }
+
+    fun moveFolder(folderId: Long, targetParentId: Long?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val repo = repository ?: return@launch
+            if (folderId == targetParentId) return@launch
+
+            var checkId = targetParentId
+            val foldersMap = allFolders.value.associateBy { it.id }
+            var isDescendant = false
+            val visited = mutableSetOf<Long>()
+            while (checkId != null && !visited.contains(checkId)) {
+                visited.add(checkId)
+                if (checkId == folderId) {
+                    isDescendant = true
+                    break
+                }
+                checkId = foldersMap[checkId]?.parentId
+            }
+            if (isDescendant) return@launch
+
+            val folder = foldersMap[folderId] ?: return@launch
+            repo.updateFolder(folder.copy(parentId = targetParentId))
+        }
+    }
+
+    fun moveGroupToFolder(groupId: Long, targetFolderId: Long?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val repo = repository ?: return@launch
+            val group = allGroups.value.find { it.id == groupId } ?: return@launch
+            repo.updateGroup(group.copy(folderId = targetFolderId))
+        }
+    }
+
+    fun copyFolder(folderId: Long, targetParentId: Long?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val repo = repository ?: return@launch
+            val foldersMap = allFolders.value.associateBy { it.id }
+            val srcFolder = foldersMap[folderId] ?: return@launch
+
+            suspend fun copyRecursively(currentFolder: com.example.data.FamilyFolder, parentId: Long?): Long {
+                val newFolderId = repo.insertFolder(
+                    com.example.data.FamilyFolder(
+                        name = "${currentFolder.name} (کپی)",
+                        parentId = parentId,
+                        displayOrder = currentFolder.displayOrder
+                    )
+                )
+
+                val groupsInFolder = allGroups.value.filter { it.folderId == currentFolder.id }
+                for (g in groupsInFolder) {
+                    copyGroupInternal(g, newFolderId)
+                }
+
+                val subfolders = allFolders.value.filter { it.parentId == currentFolder.id }
+                for (sf in subfolders) {
+                    copyRecursively(sf, newFolderId)
+                }
+
+                return newFolderId
+            }
+
+            copyRecursively(srcFolder, targetParentId)
+        }
+    }
+
+    fun copyGroupToFolder(groupId: Long, targetFolderId: Long?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val g = allGroups.value.find { it.id == groupId } ?: return@launch
+            copyGroupInternal(g, targetFolderId)
+        }
+    }
+
+    private suspend fun copyGroupInternal(group: com.example.data.FamilyGroup, targetFolderId: Long?) {
+        val repo = repository ?: return
+        val newGroupId = repo.insertGroup(
+            com.example.data.FamilyGroup(
+                name = "${group.name} (کپی)",
+                description = group.description,
+                displayOrder = group.displayOrder,
+                folderId = targetFolderId
+            )
+        )
+
+        val personsInGroup = allPersons.value.filter { it.groupId == group.id }
+        val oldToNewPersonIdMap = mutableMapOf<Long, Long>()
+
+        for (p in personsInGroup) {
+            val newPersonId = repo.insertPerson(p.copy(id = 0, groupId = newGroupId))
+            oldToNewPersonIdMap[p.id] = newPersonId
+        }
+
+        val groupPersonIds = personsInGroup.map { it.id }.toSet()
+        val relsInGroup = allRelationships.value.filter { r ->
+            groupPersonIds.contains(r.personId1) && groupPersonIds.contains(r.personId2)
+        }
+
+        for (r in relsInGroup) {
+            val newP1 = oldToNewPersonIdMap[r.personId1]
+            val newP2 = oldToNewPersonIdMap[r.personId2]
+            if (newP1 != null && newP2 != null) {
+                repo.insertRelationship(r.copy(id = 0, personId1 = newP1, personId2 = newP2))
+            }
         }
     }
 
@@ -918,13 +1104,25 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         try {
             val backupObj = org.json.JSONObject()
             
-            // Settings
+            // Folders
             if (groupId == null) {
                 val settingsObj = org.json.JSONObject().apply {
                     put("treeLayout", treeLayout.value)
                     put("treeTheme", treeTheme.value)
                 }
                 backupObj.put("settings", settingsObj)
+
+                val foldersArr = org.json.JSONArray()
+                for (f in allFolders.value) {
+                    val fObj = org.json.JSONObject().apply {
+                        put("id", f.id)
+                        put("name", f.name)
+                        put("parentId", f.parentId ?: org.json.JSONObject.NULL)
+                        put("displayOrder", f.displayOrder)
+                    }
+                    foldersArr.put(fObj)
+                }
+                backupObj.put("folders", foldersArr)
             }
             
             // Groups
@@ -939,6 +1137,8 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     put("id", g.id)
                     put("name", g.name)
                     put("description", g.description ?: org.json.JSONObject.NULL)
+                    put("displayOrder", g.displayOrder)
+                    put("folderId", g.folderId ?: org.json.JSONObject.NULL)
                 }
                 groupsArr.put(gObj)
             }
@@ -1028,6 +1228,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 val personsArr = backupObj.getJSONArray("persons")
                 val relsArr = backupObj.getJSONArray("relationships")
                 val groupsArr = if (backupObj.has("groups")) backupObj.getJSONArray("groups") else org.json.JSONArray()
+                val foldersArr = if (backupObj.has("folders")) backupObj.getJSONArray("folders") else org.json.JSONArray()
                 
                 // Restore Settings
                 if (backupObj.has("settings")) {
@@ -1043,16 +1244,60 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 
                 // We do NOT clear the data, so we can merge existing and backup information safely!
+                val oldToNewFolderIdMap = mutableMapOf<Long, Long>()
                 val oldToNewGroupIdMap = mutableMapOf<Long, Long>()
                 val oldToNewPersonIdMap = mutableMapOf<Long, Long>()
                 
+                // 1. Restore Folders
+                val folderListToImport = mutableListOf<org.json.JSONObject>()
+                for (i in 0 until foldersArr.length()) {
+                    folderListToImport.add(foldersArr.getJSONObject(i))
+                }
+                val remainingFolders = folderListToImport.toMutableList()
+                var passCount = 0
+                while (remainingFolders.isNotEmpty() && passCount < 10) {
+                    passCount++
+                    val iterator = remainingFolders.iterator()
+                    while (iterator.hasNext()) {
+                        val fObj = iterator.next()
+                        val oldId = fObj.getLong("id")
+                        val name = fObj.getString("name")
+                        val oldParentId = if (fObj.isNull("parentId")) null else fObj.getLong("parentId")
+                        val displayOrder = if (fObj.has("displayOrder")) fObj.getInt("displayOrder") else 0
+
+                        if (oldParentId == null || oldToNewFolderIdMap.containsKey(oldParentId)) {
+                            val newParentId = if (oldParentId != null) oldToNewFolderIdMap[oldParentId] else null
+                            val newFolderId = repo.insertFolder(
+                                com.example.data.FamilyFolder(id = 0, name = name, parentId = newParentId, displayOrder = displayOrder)
+                            )
+                            oldToNewFolderIdMap[oldId] = newFolderId
+                            iterator.remove()
+                        }
+                    }
+                }
+                for (fObj in remainingFolders) {
+                    val oldId = fObj.getLong("id")
+                    val name = fObj.getString("name")
+                    val displayOrder = if (fObj.has("displayOrder")) fObj.getInt("displayOrder") else 0
+                    val newFolderId = repo.insertFolder(
+                        com.example.data.FamilyFolder(id = 0, name = name, parentId = null, displayOrder = displayOrder)
+                    )
+                    oldToNewFolderIdMap[oldId] = newFolderId
+                }
+
+                // 2. Restore Groups
                 for (i in 0 until groupsArr.length()) {
                     val gObj = groupsArr.getJSONObject(i)
                     val oldId = gObj.getLong("id")
                     val name = gObj.getString("name")
                     val description = if (gObj.isNull("description")) null else gObj.getString("description")
+                    val displayOrder = if (gObj.has("displayOrder")) gObj.getInt("displayOrder") else 0
+                    val oldFolderId = if (gObj.has("folderId") && !gObj.isNull("folderId")) gObj.getLong("folderId") else null
+                    val newFolderId = if (oldFolderId != null) oldToNewFolderIdMap[oldFolderId] else null
                     
-                    val newId = repo.insertGroup(com.example.data.FamilyGroup(id = 0, name = name, description = description))
+                    val newId = repo.insertGroup(
+                        com.example.data.FamilyGroup(id = 0, name = name, description = description, displayOrder = displayOrder, folderId = newFolderId)
+                    )
                     oldToNewGroupIdMap[oldId] = newId
                 }
                 

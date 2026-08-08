@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -399,7 +401,7 @@ fun ProfileExportCard(
                             }
                         } else {
                             Icon(
-                                if (person.gender == "Male") Icons.Default.Boy else Icons.Default.Girl,
+                                if (person.gender == "Male") TablerIcons.User else TablerIcons.User,
                                 contentDescription = null,
                                 tint = if (person.gender == "Male") Color(0xFF1976D2) else Color(0xFFC2185B),
                                 modifier = Modifier.size(26.dp)
@@ -563,7 +565,7 @@ fun MemberDetailsDialog(
                             )
                         } else {
                             Icon(
-                                if (person.gender == "Male") Icons.Default.Boy else Icons.Default.Girl,
+                                if (person.gender == "Male") TablerIcons.User else TablerIcons.User,
                                 contentDescription = null,
                                 tint = if (person.gender == "Male") Color(0xFF1976D2) else Color(0xFFC2185B)
                             )
@@ -591,7 +593,7 @@ fun MemberDetailsDialog(
                             }
                         ) {
                             Icon(
-                                Icons.Default.Download,
+                                TablerIcons.Download,
                                 contentDescription = "دانلود عکس پروفایل کامل",
                                 tint = dialogAccentOrange
                             )
@@ -603,7 +605,7 @@ fun MemberDetailsDialog(
                             }
                         ) {
                             Icon(
-                                Icons.Default.Share,
+                                TablerIcons.Share,
                                 contentDescription = "اشتراک‌گذاری سریع",
                                 tint = dialogAccentOrange
                             )
@@ -615,12 +617,16 @@ fun MemberDetailsDialog(
                             onClick = { showActionMenu = true },
                             modifier = Modifier.testTag("member_action_menu")
                         ) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "عملیات", tint = textColor)
+                            Icon(TablerIcons.DotsVertical, contentDescription = "عملیات", tint = textColor)
                         }
                         DropdownMenu(
                             expanded = showActionMenu,
                             onDismissRequest = { showActionMenu = false },
-                            modifier = Modifier.background(Color.White)
+                            shape = RoundedCornerShape(18.dp),
+                            containerColor = Color.White,
+                            tonalElevation = 8.dp,
+                            shadowElevation = 10.dp,
+                            border = BorderStroke(1.5.dp, dialogAccentOrange.copy(alpha = 0.5f))
                         ) {
                             DropdownMenuItem(
                                 text = { Text("ویرایش مشخصات عضو", color = textColor) },
@@ -628,7 +634,7 @@ fun MemberDetailsDialog(
                                     showActionMenu = false
                                     onEditPerson(person)
                                 },
-                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = dialogAccentOrange) }
+                                leadingIcon = { Icon(TablerIcons.Pencil, contentDescription = null, tint = dialogAccentOrange) }
                             )
                             DropdownMenuItem(
                                 text = { Text("افزودن همسر", color = textColor) },
@@ -636,7 +642,7 @@ fun MemberDetailsDialog(
                                     showActionMenu = false
                                     onAddSpouse(person)
                                 },
-                                leadingIcon = { Icon(Icons.Default.Favorite, contentDescription = null, tint = dialogAccentOrange) }
+                                leadingIcon = { Icon(TablerIcons.Heart, contentDescription = null, tint = dialogAccentOrange) }
                             )
                             DropdownMenuItem(
                                 text = { Text("افزودن فرزند (زیرمجموعه)", color = textColor) },
@@ -644,7 +650,7 @@ fun MemberDetailsDialog(
                                     showActionMenu = false
                                     onAddChild(person)
                                 },
-                                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, tint = dialogAccentOrange) }
+                                leadingIcon = { Icon(TablerIcons.Plus, contentDescription = null, tint = dialogAccentOrange) }
                             )
                             DropdownMenuItem(
                                 text = { Text("کپی اطلاعات عضو", color = textColor) },
@@ -665,7 +671,7 @@ fun MemberDetailsDialog(
                                     clipboardManager.setPrimaryClip(clip)
                                     Toast.makeText(context, "اطلاعات عضو در حافظه کپی شد", Toast.LENGTH_SHORT).show()
                                 },
-                                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = dialogAccentOrange) }
+                                leadingIcon = { Icon(TablerIcons.Copy, contentDescription = null, tint = dialogAccentOrange) }
                             )
                             DropdownMenuItem(
                                 text = { Text("مسیر یابی از این شخص (مبداء)", color = textColor) },
@@ -673,7 +679,7 @@ fun MemberDetailsDialog(
                                     showActionMenu = false
                                     onHighlightFrom()
                                 },
-                                leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = dialogAccentOrange) }
+                                leadingIcon = { Icon(TablerIcons.MapPin, contentDescription = null, tint = dialogAccentOrange) }
                             )
                             DropdownMenuItem(
                                 text = { Text("مسیر یابی به این شخص (مقصد)", color = textColor) },
@@ -681,7 +687,7 @@ fun MemberDetailsDialog(
                                     showActionMenu = false
                                     onHighlightTo()
                                 },
-                                leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null, tint = dialogAccentOrange) }
+                                leadingIcon = { Icon(TablerIcons.Flag, contentDescription = null, tint = dialogAccentOrange) }
                             )
                             DropdownMenuItem(
                                 text = { Text("تغییر یا انتقال ارتباط", color = textColor) },
@@ -689,7 +695,7 @@ fun MemberDetailsDialog(
                                     showActionMenu = false
                                     onMoveRelation(person)
                                 },
-                                leadingIcon = { Icon(Icons.Default.SyncAlt, contentDescription = null, tint = dialogAccentOrange) }
+                                leadingIcon = { Icon(TablerIcons.Refresh, contentDescription = null, tint = dialogAccentOrange) }
                             )
                             if (parentsList.size < 2) {
                                 DropdownMenuItem(
@@ -698,7 +704,7 @@ fun MemberDetailsDialog(
                                         showActionMenu = false
                                         onAddParents(person)
                                     },
-                                    leadingIcon = { Icon(Icons.Default.People, contentDescription = null, tint = dialogAccentOrange) }
+                                    leadingIcon = { Icon(TablerIcons.Users, contentDescription = null, tint = dialogAccentOrange) }
                                 )
                             }
                             DropdownMenuItem(
@@ -707,7 +713,7 @@ fun MemberDetailsDialog(
                                     showActionMenu = false
                                     onBackupSubtree(person)
                                 },
-                                leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = dialogAccentOrange) }
+                                leadingIcon = { Icon(TablerIcons.CloudUpload, contentDescription = null, tint = dialogAccentOrange) }
                             )
                             Divider(modifier = Modifier.padding(vertical = 4.dp))
                             DropdownMenuItem(
@@ -716,7 +722,7 @@ fun MemberDetailsDialog(
                                     showActionMenu = false
                                     onDelete()
                                 },
-                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red) }
+                                leadingIcon = { Icon(TablerIcons.Trash, contentDescription = null, tint = Color.Red) }
                             )
                         }
                     }

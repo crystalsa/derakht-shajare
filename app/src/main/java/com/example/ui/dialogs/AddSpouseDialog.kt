@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -210,7 +212,7 @@ fun AddSpouseDialog(
                                 ) {
                                     Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                         Text(selectedGroupName, color = textColor, fontSize = 14.sp)
-                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = accentColor)
+                                        Icon(TablerIcons.ChevronDown, contentDescription = null, tint = accentColor)
                                     }
                                     DropdownMenu(expanded = showGroupDropdown, onDismissRequest = { showGroupDropdown = false }, modifier = Modifier.fillMaxWidth(0.8f).background(Color.White)) {
                                         groups.forEach { g ->
@@ -245,7 +247,7 @@ fun AddSpouseDialog(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(p.fullName, color = textColor, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f))
-                                        if (isSelected) Icon(Icons.Default.Check, contentDescription = null, tint = accentColor)
+                                        if (isSelected) Icon(TablerIcons.Check, contentDescription = null, tint = accentColor)
                                     }
                                 }
                             }

@@ -10,8 +10,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -217,7 +217,7 @@ fun InlineFarsiDatePicker(
                     ) {
                         val dayDisplay = if (selectedDayIndex == 0) "نامشخص" else selectedDayIndex.toFarsiNumbers()
                         Text(dayDisplay, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21))
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF2E7D32))
+                        Icon(TablerIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF2E7D32))
                     }
                 }
                 DropdownMenu(
@@ -274,7 +274,7 @@ fun InlineFarsiDatePicker(
                     ) {
                         val monthDisplay = months[selectedMonthIndex]
                         Text(monthDisplay, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF2E7D32))
+                        Icon(TablerIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF2E7D32))
                     }
                 }
                 DropdownMenu(
@@ -315,7 +315,7 @@ fun InlineFarsiDatePicker(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(selectedYear.toFarsiNumbers(), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21))
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF2E7D32))
+                        Icon(TablerIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF2E7D32))
                     }
                 }
                 DropdownMenu(
@@ -477,7 +477,7 @@ fun FarsiWheelDatePickerDialog(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(selectedYear.toString(), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21))
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF2E7D32))
+                                    Icon(TablerIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF2E7D32))
                                 }
                             }
                             DropdownMenu(
@@ -535,7 +535,7 @@ fun FarsiWheelDatePickerDialog(
                                 ) {
                                     val monthDisplay = months[selectedMonthIndex]
                                     Text(monthDisplay, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF2E7D32))
+                                    Icon(TablerIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF2E7D32))
                                 }
                             }
                             DropdownMenu(
@@ -577,7 +577,7 @@ fun FarsiWheelDatePickerDialog(
                                 ) {
                                     val dayDisplay = if (selectedDayIndex == 0) "نامشخص" else selectedDayIndex.toString()
                                     Text(dayDisplay, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21))
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF2E7D32))
+                                    Icon(TablerIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF2E7D32))
                                 }
                             }
                             DropdownMenu(

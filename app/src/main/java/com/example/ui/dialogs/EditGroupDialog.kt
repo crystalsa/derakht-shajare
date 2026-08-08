@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -146,7 +148,7 @@ fun EditGroupDialog(
                     contentPadding = PaddingValues(vertical = 10.dp),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Icon(Icons.Default.Save, contentDescription = null, tint = Color(0xFF2E7D32))
+                    Icon(TablerIcons.DeviceFloppy, contentDescription = null, tint = Color(0xFF2E7D32))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("تهیه فایل پشتیبان گروه", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
@@ -158,7 +160,7 @@ fun EditGroupDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFEBEE)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFC62828))
+                    Icon(TablerIcons.Trash, contentDescription = null, tint = Color(0xFFC62828))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("حذف این گروه و اعضای آن", color = Color(0xFFC62828), fontWeight = FontWeight.Bold)
                 }

@@ -11,9 +11,8 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountTree
-import androidx.compose.material.icons.filled.Add
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -90,7 +89,7 @@ fun InteractiveFamilyTree(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            Icons.Default.AccountTree,
+                            TablerIcons.Sitemap,
                             contentDescription = null,
                             modifier = Modifier.size(if (isCompact) 28.dp else 40.dp),
                             tint = accentColor
@@ -128,7 +127,7 @@ fun InteractiveFamilyTree(
                             .heightIn(min = if (isCompact) 40.dp else 48.dp)
                     ) {
                         Icon(
-                            Icons.Default.Add,
+                            TablerIcons.Plus,
                             contentDescription = null,
                             modifier = Modifier.size(if (isCompact) 16.dp else 20.dp),
                             tint = Color.White

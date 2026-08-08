@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -93,7 +95,7 @@ fun StatsDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("آمار و آنالیز جمعیتی فامیل", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = textColor)
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "بستن", tint = textColor) }
+                    IconButton(onClick = onDismiss) { Icon(TablerIcons.X, contentDescription = "بستن", tint = textColor) }
                 }
 
                 Divider()

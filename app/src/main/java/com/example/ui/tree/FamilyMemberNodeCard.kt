@@ -9,12 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Boy
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Girl
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Visibility
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -105,7 +101,7 @@ fun FamilyMemberNodeCard(
         }) {
             if (isShadow) {
                 Icon(
-                    imageVector = Icons.Default.Link,
+                    imageVector = TablerIcons.Link,
                     contentDescription = "Shadow Link",
                     tint = Color.Gray,
                     modifier = Modifier
@@ -135,7 +131,7 @@ fun FamilyMemberNodeCard(
 
             if (spouseHeartColor != null) {
                 Icon(
-                    imageVector = Icons.Default.Favorite,
+                    imageVector = TablerIcons.Heart,
                     contentDescription = "همسر",
                     tint = spouseHeartColor,
                     modifier = Modifier
@@ -153,7 +149,7 @@ fun FamilyMemberNodeCard(
                     .size(24.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Visibility,
+                    imageVector = TablerIcons.Eye,
                     contentDescription = "مشاهده خاندان",
                     tint = accentColor,
                     modifier = Modifier.size(16.dp)
@@ -188,7 +184,7 @@ fun FamilyMemberNodeCard(
                         )
                     } else {
                         Icon(
-                            if (person.gender == "Male") Icons.Default.Boy else Icons.Default.Girl,
+                            if (person.gender == "Male") TablerIcons.User else TablerIcons.User,
                             contentDescription = null,
                             tint = if (person.gender == "Male") Color(0xFF1E88E5) else Color(0xFFD81B60),
                             modifier = Modifier.size(52.dp)

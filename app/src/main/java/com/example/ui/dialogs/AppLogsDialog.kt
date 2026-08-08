@@ -7,9 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Terminal
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -49,7 +48,7 @@ fun AppLogsDialog(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Terminal, contentDescription = null, tint = accentColor)
+                    Icon(TablerIcons.Terminal2, contentDescription = null, tint = accentColor)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("لاگ‌های برنامه", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = accentColor)
                 }
@@ -102,7 +101,7 @@ fun AppLogsDialog(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = accentColor)
             ) {
-                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(TablerIcons.Copy, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("کپی لاگ‌ها", fontSize = 12.sp)
             }

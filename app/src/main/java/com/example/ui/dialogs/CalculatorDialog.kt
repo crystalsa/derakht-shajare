@@ -107,7 +107,15 @@ fun CalculatorDialog(
                             .padding(12.dp)
                     ) {
                         Text(p1?.fullName ?: "انتخاب کنید...", color = textColor)
-                        DropdownMenu(expanded = p1Dropdown, onDismissRequest = { p1Dropdown = false }, modifier = Modifier.background(Color.White)) {
+                        DropdownMenu(
+                            expanded = p1Dropdown,
+                            onDismissRequest = { p1Dropdown = false },
+                            shape = RoundedCornerShape(16.dp),
+                            containerColor = Color.White,
+                            tonalElevation = 6.dp,
+                            shadowElevation = 8.dp,
+                            border = BorderStroke(1.dp, Color.LightGray)
+                        ) {
                             persons.forEach { p ->
                                 DropdownMenuItem(
                                     text = { Text(p.fullName, color = textColor) },
@@ -132,7 +140,15 @@ fun CalculatorDialog(
                             .padding(12.dp)
                     ) {
                         Text(p2?.fullName ?: "انتخاب کنید...", color = textColor)
-                        DropdownMenu(expanded = p2Dropdown, onDismissRequest = { p2Dropdown = false }, modifier = Modifier.background(Color.White)) {
+                        DropdownMenu(
+                            expanded = p2Dropdown,
+                            onDismissRequest = { p2Dropdown = false },
+                            shape = RoundedCornerShape(16.dp),
+                            containerColor = Color.White,
+                            tonalElevation = 6.dp,
+                            shadowElevation = 8.dp,
+                            border = BorderStroke(1.dp, Color.LightGray)
+                        ) {
                             persons.forEach { p ->
                                 DropdownMenuItem(
                                     text = { Text(p.fullName, color = textColor) },

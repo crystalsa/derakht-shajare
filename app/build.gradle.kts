@@ -81,6 +81,7 @@ dependencies {
   // implementation(libs.androidx.camera.view)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
+  implementation("br.com.devsrsouza.compose.icons:tabler-icons:1.1.1")
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.graphics)

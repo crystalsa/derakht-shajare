@@ -25,12 +25,21 @@ data class Person(
         get() = "$firstName $lastName".trim()
 }
 
+@Entity(tableName = "family_folders")
+data class FamilyFolder(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val parentId: Long? = null,
+    val displayOrder: Int = 0
+) : Serializable
+
 @Entity(tableName = "family_groups")
 data class FamilyGroup(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val description: String? = null,
-    val displayOrder: Int = 0
+    val displayOrder: Int = 0,
+    val folderId: Long? = null
 ) : Serializable
 
 @Entity(tableName = "relationships")

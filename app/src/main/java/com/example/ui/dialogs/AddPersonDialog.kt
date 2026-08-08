@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import compose.icons.TablerIcons
+import compose.icons.tablericons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -218,7 +220,7 @@ fun AddPersonDialog(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(selectedGroupName, color = textColor, fontSize = 14.sp)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = accentColor)
+                            Icon(TablerIcons.ChevronDown, contentDescription = null, tint = accentColor)
                         }
                         DropdownMenu(
                             expanded = showGroupDropdown,
@@ -259,7 +261,7 @@ fun AddPersonDialog(
                                 modifier = Modifier.fillMaxWidth()
                               ) {
                                 Text(selectedSpouseName, color = textColor, fontSize = 14.sp)
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = accentColor)
+                                Icon(TablerIcons.ChevronDown, contentDescription = null, tint = accentColor)
                             }
                             DropdownMenu(
                                 expanded = showSpouseDropdown,

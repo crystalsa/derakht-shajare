@@ -45,6 +45,22 @@ interface FamilyDao {
     @Delete
     suspend fun deleteGroup(group: FamilyGroup)
 
+    // Folder methods
+    @Query("SELECT * FROM family_folders ORDER BY displayOrder ASC, id ASC")
+    fun getAllFolders(): Flow<List<FamilyFolder>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFolder(folder: FamilyFolder): Long
+
+    @Update
+    suspend fun updateFolder(folder: FamilyFolder)
+
+    @Delete
+    suspend fun deleteFolder(folder: FamilyFolder)
+
+    @Query("DELETE FROM family_folders")
+    suspend fun deleteAllFolders()
+
     @Query("UPDATE persons SET groupId = NULL WHERE groupId = :groupId")
     suspend fun removeGroupAssociationFromPersons(groupId: Long)
 

@@ -6,6 +6,7 @@ class FamilyRepository(private val familyDao: FamilyDao) {
     val allPersons: Flow<List<Person>> = familyDao.getAllPersons()
     val allRelationships: Flow<List<Relationship>> = familyDao.getAllRelationships()
     val allGroups: Flow<List<FamilyGroup>> = familyDao.getAllGroups()
+    val allFolders: Flow<List<FamilyFolder>> = familyDao.getAllFolders()
 
     suspend fun getPersonById(id: Long): Person? = familyDao.getPersonById(id)
 
@@ -36,9 +37,16 @@ class FamilyRepository(private val familyDao: FamilyDao) {
         familyDao.deleteGroup(group)
     }
 
+    suspend fun insertFolder(folder: FamilyFolder): Long = familyDao.insertFolder(folder)
+
+    suspend fun updateFolder(folder: FamilyFolder) = familyDao.updateFolder(folder)
+
+    suspend fun deleteFolder(folder: FamilyFolder) = familyDao.deleteFolder(folder)
+
     suspend fun clearAllData() {
         familyDao.deleteAllPersons()
         familyDao.deleteAllRelationships()
         familyDao.deleteAllGroups()
+        familyDao.deleteAllFolders()
     }
 }
