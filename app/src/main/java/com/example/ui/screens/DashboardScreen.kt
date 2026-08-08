@@ -2741,7 +2741,7 @@ $databaseError
             textColor = textColor,
             onDismiss = { folderToDeleteWarning = null },
             onConfirmDelete = {
-                viewModel.deleteFolder(folder)
+                viewModel.deleteFolderRecursively(folder)
                 Toast.makeText(context, "پوشه و تمامی محتویات آن حذف گردید", Toast.LENGTH_SHORT).show()
                 folderToDeleteWarning = null
             }
@@ -2808,11 +2808,12 @@ $databaseError
             onEditFolder = { f -> folderToEdit = f },
             onEditGroup = { g -> groupToEdit = g },
             onDeleteFolder = { f ->
-                if (viewModel.isFolderEmpty(f.id)) {
-                    viewModel.deleteFolder(f)
-                    Toast.makeText(context, "پوشه با موفقیت حذف شد", Toast.LENGTH_SHORT).show()
-                } else {
-                    folderToDeleteWarning = f
+                viewModel.deleteFolder(f) { success ->
+                    if (success) {
+                        Toast.makeText(context, "پوشه با موفقیت حذف شد", Toast.LENGTH_SHORT).show()
+                    } else {
+                        folderToDeleteWarning = f
+                    }
                 }
             },
             onDeleteGroup = { g -> groupToDelete = g },

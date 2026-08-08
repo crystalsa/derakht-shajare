@@ -41,6 +41,22 @@ abstract class FamilyDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `family_folders` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `parentId` INTEGER, `displayOrder` INTEGER NOT NULL DEFAULT 0)")
                 db.execSQL("ALTER TABLE `family_groups` ADD COLUMN `folderId` INTEGER")
+
+                val cursor = db.query("SELECT id, name, displayOrder FROM family_groups")
+                cursor.use {
+                    while (it.moveToNext()) {
+                        val groupId = it.getLong(it.getColumnIndexOrThrow("id"))
+                        val groupName = it.getString(it.getColumnIndexOrThrow("name"))
+                        val order = it.getInt(it.getColumnIndexOrThrow("displayOrder"))
+                        val values = android.content.ContentValues().apply {
+                            put("name", groupName)
+                            putNull("parentId")
+                            put("displayOrder", order)
+                        }
+                        val newFolderId = db.insert("family_folders", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, values)
+                        db.execSQL("UPDATE family_groups SET folderId = ? WHERE id = ?", arrayOf(newFolderId, groupId))
+                    }
+                }
             }
         }
 

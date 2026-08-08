@@ -50,7 +50,11 @@ fun FolderExplorerDialog(
     onDeleteGroup: (FamilyGroup) -> Unit,
     onMoveCopyItem: (item: Any, isFolder: Boolean, isCopy: Boolean) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var activeFolderId by remember { mutableStateOf(currentFolderId) }
+    var folderToDeleteConfirm by remember { mutableStateOf<FamilyFolder?>(null) }
+    var folderNotEmptyDialogFolder by remember { mutableStateOf<FamilyFolder?>(null) }
+    var folderRecursiveDeleteDialogFolder by remember { mutableStateOf<FamilyFolder?>(null) }
     val breadcrumbs = remember(allFolders, activeFolderId) {
         viewModel.getFolderBreadcrumbs(activeFolderId)
     }
@@ -546,6 +550,84 @@ fun FolderExplorerDialog(
                     }
                 }
             }
+        }
+    
+        folderToDeleteConfirm?.let { folder ->
+            AlertDialog(
+                onDismissRequest = { folderToDeleteConfirm = null },
+                title = { Text("حذف پوشه", fontWeight = FontWeight.Bold) },
+                text = { Text("آیا از حذف پوشه «" + folder.name + "» اطمینان دارید؟") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val targetFolder = folder
+                            folderToDeleteConfirm = null
+                            viewModel.deleteFolder(targetFolder) { success ->
+                                if (success) {
+                                    android.widget.Toast.makeText(context, "پوشه با موفقیت حذف شد", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    folderNotEmptyDialogFolder = targetFolder
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                    ) {
+                        Text("حذف", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { folderToDeleteConfirm = null }) {
+                        Text("انصراف", color = textColor)
+                    }
+                }
+            )
+        }
+
+        folderNotEmptyDialogFolder?.let { folder ->
+            AlertDialog(
+                onDismissRequest = { folderNotEmptyDialogFolder = null },
+                title = { Text("این پوشه خالی نیست", fontWeight = FontWeight.Bold, color = Color.Red) },
+                text = { Text("این پوشه خالی نیست. برای حذف، ابتدا زیرپوشه‌ها و گروه‌های داخل آن را حذف یا منتقل کنید.") },
+                confirmButton = {
+                    Button(onClick = { folderNotEmptyDialogFolder = null }) {
+                        Text("متوجه شدم")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        folderRecursiveDeleteDialogFolder = folder
+                        folderNotEmptyDialogFolder = null
+                    }) {
+                        Text("حذف پوشه و تمام محتویات آن", color = Color.Red)
+                    }
+                }
+            )
+        }
+
+        folderRecursiveDeleteDialogFolder?.let { folder ->
+            val (subCount, groupCount) = viewModel.getFolderContentCounts(folder.id)
+            AlertDialog(
+                onDismissRequest = { folderRecursiveDeleteDialogFolder = null },
+                title = { Text("هشدار حذف کامل", fontWeight = FontWeight.Bold, color = Color.Red) },
+                text = { Text("این عمل باعث حذف پوشه «" + folder.name + "»، " + subCount.toString().toFarsiNumbers() + " زیرپوشه و " + groupCount.toString().toFarsiNumbers() + " گروه فامیلی درون آن به همراه تمامی افراد و روابط خواهد شد. آیا مطمئن هستید؟") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.deleteFolderRecursively(folder)
+                            android.widget.Toast.makeText(context, "پوشه و محتویات آن حذف گردید", android.widget.Toast.LENGTH_SHORT).show()
+                            folderRecursiveDeleteDialogFolder = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                    ) {
+                        Text("حذف کامل و قطعی", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { folderRecursiveDeleteDialogFolder = null }) {
+                        Text("انصراف", color = textColor)
+                    }
+                }
+            )
         }
     }
 }

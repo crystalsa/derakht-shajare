@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -35,6 +36,8 @@ fun FamilyTreeContent(
     density: Float,
     glowPersonId: Long? = null,
     highlightedPathIds: Set<Long> = emptySet(),
+    scale: Float = 1f,
+    panOffset: Offset = Offset.Zero,
     onViewFamilyClick: (Person) -> Unit = {},
     onPersonClick: (Person) -> Unit = {},
     onPersonDoubleTap: (Person) -> Unit = {},
@@ -100,7 +103,25 @@ fun FamilyTreeContent(
         map
     }
 
-    Box(modifier = modifier) {
+    val personsById = remember(persons) {
+        persons.associateBy { it.id }
+    }
+
+    BoxWithConstraints(modifier = modifier) {
+        val widthPx = constraints.maxWidth.toFloat()
+        val heightPx = constraints.maxHeight.toFloat()
+
+        val visibleBounds = remember(scale, panOffset, widthPx, heightPx, density) {
+            if (widthPx <= 0f || heightPx <= 0f) null
+            else {
+                val marginPx = 300f * density
+                val minX = (-panOffset.x - widthPx / 2f) / scale - marginPx
+                val maxX = (widthPx / 2f - panOffset.x) / scale + marginPx
+                val minY = (-panOffset.y - heightPx / 2f) / scale - marginPx
+                val maxY = (heightPx / 2f - panOffset.y) / scale + marginPx
+                Rect(minX, minY, maxX, maxY)
+            }
+        }
         Canvas(
             modifier = Modifier.fillMaxSize()
         ) {
@@ -134,6 +155,17 @@ fun FamilyTreeContent(
                     val pos1 = positions[pos1Str]
                     val pos2 = positions[pos2Str]
                     if (pos1 != null && pos2 != null) {
+                        if (visibleBounds != null) {
+                            val minLineX = minOf(pos1.x, pos2.x) * density
+                            val maxLineX = maxOf(pos1.x, pos2.x) * density
+                            val minLineY = minOf(pos1.y, pos2.y) * density
+                            val maxLineY = maxOf(pos1.y, pos2.y) * density
+
+                            if (maxLineX < visibleBounds.left || minLineX > visibleBounds.right ||
+                                maxLineY < visibleBounds.top || minLineY > visibleBounds.bottom) {
+                                continue
+                            }
+                        }
                         val p1Offset = Offset(
                             x = pos1.x * density + size.width / 2,
                             y = pos1.y * density + size.height / 2
@@ -224,8 +256,8 @@ fun FamilyTreeContent(
                                             var p1Key = p1.toString()
                                             var p2Key = p2.toString()
                                             
-                                            val p1Person = persons.find { it.id == p1 }
-                                            val p2Person = persons.find { it.id == p2 }
+                                            val p1Person = personsById[p1]
+                                            val p2Person = personsById[p2]
                                             
                                             if (p1Person?.gender == "Female" && p2Person?.gender == "Male" && positions.containsKey("shadow_${p1}_${p2}")) {
                                                 p1Key = "shadow_${p1}_${p2}"
@@ -288,10 +320,17 @@ fun FamilyTreeContent(
             } else {
                 key.toLong()
             }
-            val person = persons.find { it.id == personId } ?: return@forEach
+            val person = personsById[personId] ?: return@forEach
 
             val cardXPx = pos.x * density
             val cardYPx = pos.y * density
+
+            if (visibleBounds != null) {
+                if (cardXPx < visibleBounds.left || cardXPx > visibleBounds.right ||
+                    cardYPx < visibleBounds.top || cardYPx > visibleBounds.bottom) {
+                    return@forEach
+                }
+            }
 
             Box(
                 modifier = Modifier

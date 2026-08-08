@@ -424,13 +424,30 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         return result
     }
 
-    fun deleteFolder(folder: com.example.data.FamilyFolder) {
+    fun deleteFolder(folder: com.example.data.FamilyFolder, onResult: ((success: Boolean) -> Unit)? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             val repo = repository ?: return@launch
-            suspend fun deleteRecursively(fId: Long) {
+            val hasSubfolders = allFolders.value.any { it.parentId == folder.id }
+            val hasGroups = allGroups.value.any { it.folderId == folder.id }
+            if (hasSubfolders || hasGroups) {
+                withContext(Dispatchers.Main) { onResult?.invoke(false) }
+                return@launch
+            }
+            repo.deleteFolder(folder)
+            if (_currentFolderId.value == folder.id) {
+                _currentFolderId.value = folder.parentId
+            }
+            withContext(Dispatchers.Main) { onResult?.invoke(true) }
+        }
+    }
+
+    fun deleteFolderRecursively(folder: com.example.data.FamilyFolder) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val repo = repository ?: return@launch
+            suspend fun doDeleteRecursively(fId: Long) {
                 val subfolders = allFolders.value.filter { it.parentId == fId }
                 for (sf in subfolders) {
-                    deleteRecursively(sf.id)
+                    doDeleteRecursively(sf.id)
                     repo.deleteFolder(sf)
                 }
                 val groupsInFolder = allGroups.value.filter { it.folderId == fId }
@@ -442,7 +459,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
 
-            deleteRecursively(folder.id)
+            doDeleteRecursively(folder.id)
             repo.deleteFolder(folder)
 
             if (_currentFolderId.value == folder.id) {

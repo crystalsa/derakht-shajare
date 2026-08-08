@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.Person
 import com.example.data.Relationship
+import com.example.ui.common.toFarsiNumbers
 import com.example.utils.RelationshipCalculator
 import kotlinx.coroutines.launch
 
@@ -233,6 +234,8 @@ fun InteractiveFamilyTree(
                 density = density,
                 glowPersonId = glowPersonId,
                 highlightedPathIds = highlightedPathIds,
+                scale = scale,
+                panOffset = animatableOffset.value,
                 onViewFamilyClick = onViewFamilyClick,
                 onPersonClick = onPersonClick,
                 onPersonDoubleTap = onPersonDoubleTap,
@@ -240,6 +243,31 @@ fun InteractiveFamilyTree(
                 onPanToPerson = onPanToPerson,
                 modifier = Modifier.fillMaxSize()
             )
+        }
+    
+        if (persons.size >= 500) {
+            Surface(
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .align(Alignment.TopCenter),
+                color = Color(0xFFFFF3E0),
+                shape = RoundedCornerShape(20.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFB74D))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(TablerIcons.InfoCircle, contentDescription = null, tint = Color(0xFFE65100), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "این گروه فامیلی بزرگ است (" + persons.size.toString().toFarsiNumbers() + " نفر) — نمایش بهینه‌سازی شده است.",
+                        fontSize = 11.sp,
+                        color = Color(0xFFE65100),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
         }
     }
 }
