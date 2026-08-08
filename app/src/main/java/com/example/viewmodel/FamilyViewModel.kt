@@ -210,7 +210,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         } else {
-            persons.forEach { visibleIds.add(it.id) }
+            // When no group is selected (e.g. folder is empty), visibleIds remains empty
         }
 
         val result = persons.filter { person ->

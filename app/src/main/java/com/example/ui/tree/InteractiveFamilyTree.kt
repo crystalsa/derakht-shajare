@@ -204,15 +204,6 @@ fun InteractiveFamilyTree(
             }
             .background(Color.Transparent)
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.ic_family_tree_icon),
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize()
-                .alpha(0.25f),
-            contentScale = ContentScale.Crop
-        )
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
