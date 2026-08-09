@@ -22,6 +22,12 @@ object PersonProfileExporter {
             AppLogger.i("PROFILE_EXPORT", "ذخیره عکس پروفایل برای: ${person.fullName}")
             val safeName = person.fullName.replace(Regex("[^a-zA-Z0-9\\u0600-\\u06FF]"), "_")
             val filename = "profile_${safeName}_${System.currentTimeMillis()}.png"
+            val safeBitmap = if (bitmap.config == Bitmap.Config.HARDWARE) {
+                bitmap.copy(Bitmap.Config.ARGB_8888, false)
+            } else {
+                bitmap
+            } ?: bitmap
+
             val resolver = context.contentResolver
             val contentValues = ContentValues().apply {
                 put(MediaStore.Images.Media.DISPLAY_NAME, filename)
@@ -34,7 +40,7 @@ object PersonProfileExporter {
             val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
             if (uri != null) {
                 resolver.openOutputStream(uri)?.use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    safeBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     contentValues.clear()
@@ -69,8 +75,14 @@ object PersonProfileExporter {
             val safeName = person.fullName.replace(Regex("[^a-zA-Z0-9\\u0600-\\u06FF]"), "_")
             val file = File(cacheDir, "profile_${safeName}_${System.currentTimeMillis()}.png")
 
+            val safeBitmap = if (bitmap.config == Bitmap.Config.HARDWARE) {
+                bitmap.copy(Bitmap.Config.ARGB_8888, false)
+            } else {
+                bitmap
+            } ?: bitmap
+
             FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                safeBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
 
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)

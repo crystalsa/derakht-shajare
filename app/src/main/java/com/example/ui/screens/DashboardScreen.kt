@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
 import com.example.R
+import com.example.data.FamilyFolder
+import com.example.data.FamilyGroup
 import com.example.ui.common.*
 import com.example.ui.dialogs.*
 import com.example.ui.tree.*
@@ -186,6 +188,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     var showRestoreDialog by remember { mutableStateOf(false) }
     var showLogsDialog by remember { mutableStateOf(false) }
     var tempExportGroupId by remember { mutableStateOf<Long?>(null) }
+    var tempExportFolderId by remember { mutableStateOf<Long?>(null) }
     var backupFileNameInput by remember { mutableStateOf("بکاپ_کامل_خاندان") }
     var backupJsonToSave by remember { mutableStateOf("") }
 
@@ -196,7 +199,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     var immersivePhotoUris by remember { mutableStateOf<List<String>>(emptyList()) }
 
     val onRestoreBackupText = { jsonText: String ->
-        viewModel.importBackupFromJson(jsonText, null) { success, msg ->
+        viewModel.importBackupFromJson(jsonText, null, currentFolderId) { success, msg ->
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
             if (success) {
                 showRestoreDialog = false
@@ -411,7 +414,7 @@ $databaseError
                             )
                             DropdownMenuItem(
                                 text = { Text("بارگذاری اطلاعات نمونه", color = textColor) },
-                                onClick = { viewModel.seedSampleData(); showSettingsMenu = false },
+                                onClick = { viewModel.seedSampleData(currentFolderId); showSettingsMenu = false },
                                 leadingIcon = { Icon(TablerIcons.Refresh, contentDescription = null, tint = accentColor) }
                             )
                             DropdownMenuItem(
@@ -3007,6 +3010,12 @@ $databaseError
             onMoveCopyItem = { item, isFolder, isCopy ->
                 moveCopyTargetItem = Pair(item, isFolder)
                 isCopyOperation = isCopy
+            },
+            onBackupFolder = { f ->
+                tempExportFolderId = f.id
+                tempExportGroupId = null
+                backupFileNameInput = "بکاپ_پوشه_${f.name}"
+                showBackupDialog = true
             }
         )
     }
@@ -3357,15 +3366,33 @@ $databaseError
     }
 
     if (showBackupDialog) {
-        var backupJson by remember(tempExportGroupId) { mutableStateOf<String?>(null) }
-        LaunchedEffect(tempExportGroupId) {
-            backupJson = viewModel.exportBackupToJson(tempExportGroupId)
+        var backupJson by remember(tempExportGroupId, tempExportFolderId) { mutableStateOf<String?>(null) }
+        LaunchedEffect(tempExportGroupId, tempExportFolderId) {
+            backupJson = if (tempExportFolderId != null) {
+                viewModel.exportFolderBackupToJson(tempExportFolderId!!)
+            } else {
+                viewModel.exportBackupToJson(tempExportGroupId)
+            }
         }
         var fileName by remember(backupFileNameInput) { mutableStateOf(backupFileNameInput) }
         
         AlertDialog(
-            onDismissRequest = { showBackupDialog = false },
-            title = { Text(if (tempExportGroupId == null) "تهیه فایل پشتیبان کلی" else "تهیه فایل پشتیبان گروه", fontWeight = FontWeight.Bold, color = textColor) },
+            onDismissRequest = {
+                showBackupDialog = false
+                tempExportFolderId = null
+                tempExportGroupId = null
+            },
+            title = {
+                Text(
+                    when {
+                        tempExportFolderId != null -> "تهیه فایل پشتیبان پوشه"
+                        tempExportGroupId != null -> "تهیه فایل پشتیبان گروه"
+                        else -> "تهیه فایل پشتیبان کلی"
+                    },
+                    fontWeight = FontWeight.Bold,
+                    color = textColor
+                )
+            },
             text = {
                 if (backupJson == null) {
                     Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
@@ -3587,7 +3614,7 @@ $databaseError
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        viewModel.importBackupFromJson(restoreJsonPending!!, group.id) { success, msg ->
+                                        viewModel.importBackupFromJson(restoreJsonPending!!, group.id, group.folderId ?: currentFolderId) { success, msg ->
                                             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                             if (success) {
                                                 showRestoreDialog = false
@@ -3844,7 +3871,7 @@ $databaseError
                             errorMessage = "لطفا ابتدا کد پشتیبان را وارد کنید یا فایل انتخاب نمایید."
                             return@Button
                         }
-                        viewModel.importSubtreeBackupFromJson(restoreText) { success, msg, newGroupId ->
+                        viewModel.importSubtreeBackupFromJson(restoreText, currentFolderId) { success, msg, newGroupId ->
                             if (success) {
                                 Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                 if (newGroupId != null) {
@@ -3872,12 +3899,17 @@ $databaseError
     if (isExportingPdf) {
         val graphicsLayer = rememberGraphicsLayer()
 
-        val groupName = remember(allGroups, selectedGroupId) {
-            allGroups.find { it.id == selectedGroupId }?.name ?: "خاندان عمومی"
+        val selectedGroup = remember(allGroups, selectedGroupId) {
+            allGroups.find { it.id == selectedGroupId } ?: allGroups.firstOrNull() ?: FamilyGroup(id = 0, name = "خاندان عمومی")
         }
+        val groupName = selectedGroup.name
 
-        val exportPersons = remember(allPersonsRaw, selectedGroupId) {
-            if (selectedGroupId != null) allPersonsRaw.filter { it.groupId == selectedGroupId } else allPersonsRaw
+        val exportPersons = remember(allPersonsRaw, selectedGroup) {
+            if (selectedGroupId != null) {
+                allPersonsRaw.filter { it.groupId == selectedGroup.id }
+            } else {
+                allPersonsRaw
+            }
         }
 
         val pdfPositions = remember(exportPersons, relationships, currentLayout, focusPersonId, expandedGhostParents) {
@@ -3905,9 +3937,9 @@ $databaseError
                 val heightDp = 2f * maxAbsY + 380f
                 val maxSpanDp = maxOf(widthDp, heightDp)
 
-                val targetMaxPx = 3600f
+                val targetMaxPx = 2400f
                 val calculatedDensity = targetMaxPx / maxSpanDp
-                minOf(density, calculatedDensity).coerceAtLeast(0.8f)
+                minOf(density, calculatedDensity).coerceIn(0.5f, 2.0f)
             }
         }
 
@@ -3947,7 +3979,7 @@ $databaseError
                     modifier = Modifier.padding(8.dp)
                 ) {
                     CircularProgressIndicator(color = accentColor)
-                    Text("لطفاً شکیبا باشید. شجره‌نامه $groupName با کیفیت بالا در حال رندر است...", fontSize = 13.sp, color = textColor)
+                    Text("لطفاً شکیبا باشید. شجره‌نامه «$groupName» در حال رندر و تبدیل به PDF است...", fontSize = 13.sp, color = textColor)
                 }
             },
             containerColor = Color.White
@@ -3988,7 +4020,7 @@ $databaseError
 
         LaunchedEffect(pdfPositions) {
             try {
-                AppLogger.i("PDF_EXPORT", "شروع فرایند تولید PDF برای خاندان: $groupName")
+                AppLogger.i("PDF_EXPORT", "شروع رندر تک صفحه برای: $groupName")
                 withFrameNanos { }
                 withFrameNanos { }
 
@@ -3996,20 +4028,17 @@ $databaseError
                 var bitmap = imageBitmap.asAndroidBitmap()
 
                 if (isBitmapVisuallyBlank(bitmap)) {
-                    AppLogger.i("PDF_EXPORT", "تصویر رندر شده در نوبت اول خالی به نظر می‌رسد، انتظار ۲ فریم دیگر...")
                     withFrameNanos { }
                     withFrameNanos { }
                     imageBitmap = graphicsLayer.toImageBitmap()
                     bitmap = imageBitmap.asAndroidBitmap()
                 }
 
-                AppLogger.i("PDF_EXPORT", "تصویر شجره‌نامه رندر شد. ابعاد: ${bitmap.width}x${bitmap.height}, کانفیگ: ${bitmap.config}")
-
-                val file = TreePdfExporter.saveBitmapToPdf(context, bitmap, groupName)
+                val file = TreePdfExporter.saveBitmapToPdf(context, bitmap, groupName, exportPersons.size)
                 isExportingPdf = false
                 TreePdfExporter.shareTreePdf(context, file)
             } catch (e: Throwable) {
-                AppLogger.e("PDF_EXPORT", "خطا در فرایند تولید یا اشتراک‌گذاری PDF", e)
+                AppLogger.e("PDF_EXPORT", "خطا در تولید یا اشتراک‌گذاری PDF", e)
                 e.printStackTrace()
                 isExportingPdf = false
                 val msg = e.localizedMessage ?: "خطا در تولید فایل PDF"

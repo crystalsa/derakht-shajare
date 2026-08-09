@@ -53,7 +53,8 @@ fun FolderExplorerDialog(
     onEditGroup: (FamilyGroup) -> Unit,
     onDeleteFolder: (FamilyFolder) -> Unit,
     onDeleteGroup: (FamilyGroup) -> Unit,
-    onMoveCopyItem: (item: Any, isFolder: Boolean, isCopy: Boolean) -> Unit
+    onMoveCopyItem: (item: Any, isFolder: Boolean, isCopy: Boolean) -> Unit,
+    onBackupFolder: ((FamilyFolder) -> Unit)? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var activeFolderId by remember { mutableStateOf(currentFolderId) }
@@ -366,6 +367,14 @@ fun FolderExplorerDialog(
                                                                 menuExpanded = false
                                                                 activeFolderId = folder.id
                                                                 viewModel.setCurrentFolderId(folder.id)
+                                                            }
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("پشتیبان‌گیری از این پوشه") },
+                                                            leadingIcon = { Icon(TablerIcons.Download, contentDescription = null, tint = accentColor) },
+                                                            onClick = {
+                                                                menuExpanded = false
+                                                                onBackupFolder?.invoke(folder)
                                                             }
                                                         )
                                                         DropdownMenuItem(

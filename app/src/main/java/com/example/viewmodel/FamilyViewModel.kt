@@ -236,15 +236,19 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Database Actions
-    fun seedSampleData() {
+    fun seedSampleData(targetFolderId: Long? = currentFolderId.value) {
         viewModelScope.launch {
             val repo = repository ?: return@launch
-            if (allPersons.value.isNotEmpty()) return@launch
 
-            // Create a default group
+            // Create a default group inside targetFolderId
             val defaultGroupId = repo.insertGroup(
-                com.example.data.FamilyGroup(name = "خانواده بزرگ علوی", description = "شجره‌نامه تاریخی خاندان علوی و بستگان نزدیک")
+                com.example.data.FamilyGroup(
+                    name = "خانواده بزرگ علوی",
+                    description = "شجره‌نامه تاریخی خاندان علوی و بستگان نزدیک",
+                    folderId = targetFolderId
+                )
             )
+            setSelectedGroupId(defaultGroupId)
 
             // Generation 0 (بزرگ خاندان اول)
             val g0f = repo.insertPerson(Person(firstName = "حاج میرزا", lastName = "علوی", gender = "Male", birthDate = "1220-01-01", birthPlace = "کاشان", deathDate = "1300-05-12", isDeceased = true, occupation = "تاجر بزرگ فرش", generation = 0, groupId = defaultGroupId))
@@ -1227,7 +1231,114 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun importBackupFromJson(jsonString: String, targetGroupId: Long? = null, onComplete: (Boolean, String) -> Unit) {
+    suspend fun exportFolderBackupToJson(folderId: Long): String = withContext(Dispatchers.IO) {
+        try {
+            val rootFolder = allFolders.value.find { it.id == folderId }
+            val backupObj = org.json.JSONObject()
+            backupObj.put("isFolderBackup", true)
+            backupObj.put("rootFolderName", rootFolder?.name ?: "پوشه")
+
+            val targetFolderIds = mutableSetOf<Long>()
+            targetFolderIds.add(folderId)
+            fun collectSubfolders(pId: Long) {
+                allFolders.value.filter { it.parentId == pId }.forEach { child ->
+                    targetFolderIds.add(child.id)
+                    collectSubfolders(child.id)
+                }
+            }
+            collectSubfolders(folderId)
+
+            val foldersArr = org.json.JSONArray()
+            for (f in allFolders.value) {
+                if (targetFolderIds.contains(f.id)) {
+                    val fObj = org.json.JSONObject().apply {
+                        put("id", f.id)
+                        put("name", f.name)
+                        put("parentId", if (f.id == folderId) org.json.JSONObject.NULL else (f.parentId ?: org.json.JSONObject.NULL))
+                        put("displayOrder", f.displayOrder)
+                    }
+                    foldersArr.put(fObj)
+                }
+            }
+            backupObj.put("folders", foldersArr)
+
+            val groupsArr = org.json.JSONArray()
+            val groupsToBackup = allGroups.value.filter { g -> g.folderId != null && targetFolderIds.contains(g.folderId) }
+            val groupIdsToBackup = groupsToBackup.map { it.id }.toSet()
+
+            for (g in groupsToBackup) {
+                val gObj = org.json.JSONObject().apply {
+                    put("id", g.id)
+                    put("name", g.name)
+                    put("description", g.description ?: org.json.JSONObject.NULL)
+                    put("displayOrder", g.displayOrder)
+                    put("folderId", g.folderId ?: org.json.JSONObject.NULL)
+                }
+                groupsArr.put(gObj)
+            }
+            backupObj.put("groups", groupsArr)
+
+            val personsArr = org.json.JSONArray()
+            val personsToBackup = allPersons.value.filter { p -> p.groupId != null && groupIdsToBackup.contains(p.groupId) }
+            val personIdsToBackup = personsToBackup.map { it.id }.toSet()
+
+            for (p in personsToBackup) {
+                val pObj = org.json.JSONObject().apply {
+                    put("id", p.id)
+                    put("firstName", p.firstName)
+                    put("lastName", p.lastName)
+                    put("gender", p.gender)
+                    put("birthDate", p.birthDate ?: org.json.JSONObject.NULL)
+                    put("birthPlace", p.birthPlace ?: org.json.JSONObject.NULL)
+                    put("deathDate", p.deathDate ?: org.json.JSONObject.NULL)
+                    put("deathPlace", p.deathPlace ?: org.json.JSONObject.NULL)
+                    put("isDeceased", p.isDeceased)
+                    put("occupation", p.occupation ?: org.json.JSONObject.NULL)
+                    put("biography", p.biography ?: org.json.JSONObject.NULL)
+                    put("photoUri", p.photoUri ?: org.json.JSONObject.NULL)
+                    put("generation", p.generation)
+                    put("groupId", p.groupId ?: org.json.JSONObject.NULL)
+
+                    val photosBase64Arr = org.json.JSONArray()
+                    val urisList = p.photoUri?.split('|')?.filter { it.isNotBlank() } ?: emptyList()
+                    for (uri in urisList) {
+                        val b64 = getBase64Image(uri)
+                        if (b64 != null) {
+                            photosBase64Arr.put(b64)
+                        }
+                    }
+                    put("photosBase64", photosBase64Arr)
+                }
+                personsArr.put(pObj)
+            }
+            backupObj.put("persons", personsArr)
+
+            val relsArr = org.json.JSONArray()
+            val relsToBackup = allRelationships.value.filter { r -> personIdsToBackup.contains(r.personId1) && personIdsToBackup.contains(r.personId2) }
+            for (r in relsToBackup) {
+                val rObj = org.json.JSONObject().apply {
+                    put("id", r.id)
+                    put("personId1", r.personId1)
+                    put("personId2", r.personId2)
+                    put("type", r.type)
+                }
+                relsArr.put(rObj)
+            }
+            backupObj.put("relationships", relsArr)
+
+            backupObj.toString(4)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            "{}"
+        }
+    }
+
+    fun importBackupFromJson(
+        jsonString: String,
+        targetGroupId: Long? = null,
+        targetFolderId: Long? = currentFolderId.value,
+        onComplete: (Boolean, String) -> Unit
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             val repo = repository
             if (repo == null) {
@@ -1283,7 +1394,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         val displayOrder = if (fObj.has("displayOrder")) fObj.getInt("displayOrder") else 0
 
                         if (oldParentId == null || oldToNewFolderIdMap.containsKey(oldParentId)) {
-                            val newParentId = if (oldParentId != null) oldToNewFolderIdMap[oldParentId] else null
+                            val newParentId = if (oldParentId != null) oldToNewFolderIdMap[oldParentId] else targetFolderId
                             val newFolderId = repo.insertFolder(
                                 com.example.data.FamilyFolder(id = 0, name = name, parentId = newParentId, displayOrder = displayOrder)
                             )
@@ -1297,25 +1408,36 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     val name = fObj.getString("name")
                     val displayOrder = if (fObj.has("displayOrder")) fObj.getInt("displayOrder") else 0
                     val newFolderId = repo.insertFolder(
-                        com.example.data.FamilyFolder(id = 0, name = name, parentId = null, displayOrder = displayOrder)
+                        com.example.data.FamilyFolder(id = 0, name = name, parentId = targetFolderId, displayOrder = displayOrder)
                     )
                     oldToNewFolderIdMap[oldId] = newFolderId
                 }
 
                 // 2. Restore Groups
-                for (i in 0 until groupsArr.length()) {
-                    val gObj = groupsArr.getJSONObject(i)
-                    val oldId = gObj.getLong("id")
-                    val name = gObj.getString("name")
-                    val description = if (gObj.isNull("description")) null else gObj.getString("description")
-                    val displayOrder = if (gObj.has("displayOrder")) gObj.getInt("displayOrder") else 0
-                    val oldFolderId = if (gObj.has("folderId") && !gObj.isNull("folderId")) gObj.getLong("folderId") else null
-                    val newFolderId = if (oldFolderId != null) oldToNewFolderIdMap[oldFolderId] else null
+                if (groupsArr.length() > 0) {
+                    for (i in 0 until groupsArr.length()) {
+                        val gObj = groupsArr.getJSONObject(i)
+                        val oldId = gObj.getLong("id")
+                        val name = gObj.getString("name")
+                        val description = if (gObj.isNull("description")) null else gObj.getString("description")
+                        val displayOrder = if (gObj.has("displayOrder")) gObj.getInt("displayOrder") else 0
+                        val oldFolderId = if (gObj.has("folderId") && !gObj.isNull("folderId")) gObj.getLong("folderId") else null
+                        val newFolderId = if (oldFolderId != null) (oldToNewFolderIdMap[oldFolderId] ?: targetFolderId) else targetFolderId
+                        
+                        val newId = repo.insertGroup(
+                            com.example.data.FamilyGroup(id = 0, name = name, description = description, displayOrder = displayOrder, folderId = newFolderId)
+                        )
+                        oldToNewGroupIdMap[oldId] = newId
+                    }
+                } else if (targetGroupId == null) {
+                    val rootFolderName = backupObj.optString("rootFolderName", "")
+                    val rootPersonName = backupObj.optString("rootPersonName", "")
+                    val defaultGroupName = if (rootPersonName.isNotBlank()) "شجره‌نامه $rootPersonName" else if (rootFolderName.isNotBlank()) "پوشه $rootFolderName" else "خاندان بازگردانی‌شده"
                     
-                    val newId = repo.insertGroup(
-                        com.example.data.FamilyGroup(id = 0, name = name, description = description, displayOrder = displayOrder, folderId = newFolderId)
+                    val fallbackGroupId = repo.insertGroup(
+                        com.example.data.FamilyGroup(id = 0, name = defaultGroupName, folderId = targetFolderId)
                     )
-                    oldToNewGroupIdMap[oldId] = newId
+                    oldToNewGroupIdMap[-1L] = fallbackGroupId
                 }
                 
                 var anyOldDanglingPhotosFound = false
@@ -1340,9 +1462,9 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     val newGroupId = if (targetGroupId != null) {
                         targetGroupId
                     } else if (oldGroupId != null) {
-                        oldToNewGroupIdMap[oldGroupId]
+                        oldToNewGroupIdMap[oldGroupId] ?: oldToNewGroupIdMap.values.firstOrNull()
                     } else {
-                        null
+                        oldToNewGroupIdMap.values.firstOrNull()
                     }
                     
                     // Restore photos from Base64
@@ -1544,7 +1666,11 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         backupObj.toString(4)
     }
 
-    fun importSubtreeBackupFromJson(jsonString: String, onComplete: (Boolean, String, Long?) -> Unit) {
+    fun importSubtreeBackupFromJson(
+        jsonString: String,
+        targetFolderId: Long? = currentFolderId.value,
+        onComplete: (Boolean, String, Long?) -> Unit
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             val repo = repository
             if (repo == null) {
@@ -1563,9 +1689,15 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 val relsArr = backupObj.getJSONArray("relationships")
                 val rootPersonName = backupObj.optString("rootPersonName", "عضو")
                 
-                // Create a new group
+                // Create a new group inside targetFolderId
                 val newGroupName = "شجره‌نامه بازگردانی شده ($rootPersonName)"
-                val newGroupId = repo.insertGroup(com.example.data.FamilyGroup(name = newGroupName, description = "بازگردانی شده از بکاپ عضو"))
+                val newGroupId = repo.insertGroup(
+                    com.example.data.FamilyGroup(
+                        name = newGroupName,
+                        description = "بازگردانی شده از بکاپ عضو",
+                        folderId = targetFolderId
+                    )
+                )
                 
                 // Map to store old person ID to new person ID mappings
                 val oldToNewIdMap = mutableMapOf<Long, Long>()

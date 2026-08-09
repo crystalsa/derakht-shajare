@@ -39,21 +39,45 @@ fun isBitmapVisuallyBlank(bitmap: Bitmap): Boolean {
     val width = bitmap.width
     val height = bitmap.height
     if (width <= 0 || height <= 0) return true
-    val firstPixel = bitmap.getPixel(0, 0)
-    val numSamples = 10
-    val dx = width / numSamples
-    val dy = height / numSamples
-    if (dx <= 0 || dy <= 0) return false
-    for (i in 0 until numSamples) {
-        for (j in 0 until numSamples) {
-            val x = (i * dx).coerceIn(0, width - 1)
-            val y = (j * dy).coerceIn(0, height - 1)
-            if (bitmap.getPixel(x, y) != firstPixel) {
-                return false
+    
+    val safeBitmap = if (bitmap.config == Bitmap.Config.HARDWARE) {
+        try {
+            bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        } catch (e: Exception) {
+            null
+        }
+    } else {
+        bitmap
+    } ?: return false
+
+    return try {
+        val firstPixel = safeBitmap.getPixel(0, 0)
+        val numSamples = 10
+        val dx = width / numSamples
+        val dy = height / numSamples
+        if (dx <= 0 || dy <= 0) false
+        else {
+            var isBlank = true
+            for (i in 0 until numSamples) {
+                for (j in 0 until numSamples) {
+                    val x = (i * dx).coerceIn(0, width - 1)
+                    val y = (j * dy).coerceIn(0, height - 1)
+                    if (safeBitmap.getPixel(x, y) != firstPixel) {
+                        isBlank = false
+                        break
+                    }
+                }
+                if (!isBlank) break
             }
+            isBlank
+        }
+    } catch (e: Exception) {
+        false
+    } finally {
+        if (safeBitmap != bitmap) {
+            safeBitmap.recycle()
         }
     }
-    return true
 }
 
 fun isSpouseRelation(type: String): Boolean {
