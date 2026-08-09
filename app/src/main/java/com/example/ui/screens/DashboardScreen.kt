@@ -360,16 +360,7 @@ $databaseError
     }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_family_tree_icon),
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(0.28f),
-                contentScale = ContentScale.Crop
-            )
-            Scaffold(
+        Scaffold(
         topBar = {
             TopAppBar(
                 title = { 
@@ -472,13 +463,13 @@ $databaseError
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = bgColor.copy(alpha = 0.85f)
+                    containerColor = bgColor
                 )
             )
         },
         bottomBar = {
             NavigationBar(
-                containerColor = bgColor.copy(alpha = 0.85f)
+                containerColor = bgColor
             ) {
                 NavigationBarItem(
                     selected = activeTab == "Tree",
@@ -516,7 +507,7 @@ $databaseError
                 Icon(Icons.Default.Add, contentDescription = "افزودن عضو")
             }
         },
-        containerColor = Color.Transparent
+        containerColor = bgColor
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -836,6 +827,16 @@ $databaseError
             // Tabs implementation
             Box(modifier = Modifier.fillMaxSize()) {
                 if (activeTab == "Tree") {
+                    if (orderedGroupsList.isEmpty() && currentSubfolders.isEmpty()) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_family_tree_icon),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(0.55f),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
                     if (orderedGroupsList.isEmpty()) {
                         val scrollState = rememberScrollState()
                         Column(
@@ -940,78 +941,76 @@ $databaseError
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(top = 16.dp)
-                                        .clip(RoundedCornerShape(28.dp)),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                                    border = BorderStroke(1.dp, lineEffectColor),
+                                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.5f)),
                                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(32.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Box(
+                                        Column(
                                             modifier = Modifier
-                                                .size(72.dp)
-                                                .background(Color(0xFFFFF8E1), CircleShape),
-                                            contentAlignment = Alignment.Center
+                                                .fillMaxWidth()
+                                                .padding(32.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
                                         ) {
-                                            Icon(
-                                                imageVector = TablerIcons.Folder,
-                                                contentDescription = null,
-                                                tint = Color(0xFFF57C00),
-                                                modifier = Modifier.size(38.dp)
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        Text(
-                                            text = "این پوشه خالی است",
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = textColor
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            text = "هیچ گروه فامیلی یا زیرپوشه‌ای در این بخش وجود ندارد.",
-                                            fontSize = 12.sp,
-                                            color = Color.Gray,
-                                            textAlign = TextAlign.Center
-                                        )
-                                        Spacer(modifier = Modifier.height(20.dp))
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            Button(
-                                                onClick = { showAddFolderDialog = true },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = Color(0xFFFFF3E0),
-                                                    contentColor = Color(0xFFE65100)
-                                                ),
-                                                shape = RoundedCornerShape(12.dp)
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(72.dp)
+                                                    .background(Color(0xFFFFF8E1), CircleShape),
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Icon(TablerIcons.FolderPlus, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("ایجاد زیرپوشه", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                Icon(
+                                                    imageVector = TablerIcons.Folder,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFF57C00),
+                                                    modifier = Modifier.size(38.dp)
+                                                )
                                             }
-
-                                            Button(
-                                                onClick = { showAddGroupDialog = true },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = accentColor,
-                                                    contentColor = Color.White
-                                                ),
-                                                shape = RoundedCornerShape(12.dp)
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Text(
+                                                text = "این پوشه خالی است",
+                                                fontSize = 17.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = textColor
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = "هیچ گروه فامیلی یا زیرپوشه‌ای در این بخش وجود ندارد.",
+                                                fontSize = 12.sp,
+                                                color = Color.Gray,
+                                                textAlign = TextAlign.Center
+                                            )
+                                            Spacer(modifier = Modifier.height(20.dp))
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                                             ) {
-                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("ایجاد گروه فامیلی", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                Button(
+                                                    onClick = { showAddFolderDialog = true },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFFFFF3E0),
+                                                        contentColor = Color(0xFFE65100)
+                                                    ),
+                                                    shape = RoundedCornerShape(12.dp)
+                                                ) {
+                                                    Icon(TablerIcons.FolderPlus, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("ایجاد زیرپوشه", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                }
+
+                                                Button(
+                                                    onClick = { showAddGroupDialog = true },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = accentColor,
+                                                        contentColor = Color.White
+                                                    ),
+                                                    shape = RoundedCornerShape(12.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("ایجاد گروه فامیلی", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                }
                                             }
                                         }
                                     }
-                                }
                             }
                         }
                     } else if (currentTheme == "Bento Grid" && !isTreeExpanded) {
@@ -4026,6 +4025,5 @@ $databaseError
             onDismiss = { showLogsDialog = false }
         )
     }
-}
 }
 

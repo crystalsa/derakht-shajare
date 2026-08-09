@@ -68,18 +68,26 @@ fun InteractiveFamilyTree(
         ) {
             val isCompact = maxHeight < 350.dp
             
+            Image(
+                painter = painterResource(id = R.drawable.ic_family_tree_icon),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(0.55f),
+                contentScale = ContentScale.Fit
+            )
+
             Card(
                 modifier = Modifier
                     .fillMaxWidth(if (isCompact) 0.95f else 0.9f)
-                    .border(1.5.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
                     .clip(RoundedCornerShape(24.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.5f)),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
-                        .background(Brush.verticalGradient(listOf(Color(0xFFF9FBF9), Color.White)))
+                        .background(Brush.verticalGradient(listOf(Color(0xFFF9FBF9).copy(alpha = 0.5f), Color.White.copy(alpha = 0.5f))))
                         .padding(if (isCompact) 16.dp else 28.dp)
                 ) {
                     Box(
@@ -204,6 +212,15 @@ fun InteractiveFamilyTree(
             }
             .background(Color.Transparent)
     ) {
+        Image(
+            painter = painterResource(id = R.drawable.ic_family_tree_icon),
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(0.25f),
+            contentScale = ContentScale.Crop
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
