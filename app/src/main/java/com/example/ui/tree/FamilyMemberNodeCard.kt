@@ -113,19 +113,17 @@ fun FamilyMemberNodeCard(
             }
 
             if (person.isDeceased) {
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                    Canvas(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .align(Alignment.TopEnd)
-                    ) {
-                        drawLine(
-                            color = Color(0xFF1E1E1E),
-                            start = Offset(0f, size.height),
-                            end = Offset(size.width, 0f),
-                            strokeWidth = 6.dp.toPx()
-                        )
-                    }
+                Canvas(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .align(Alignment.TopEnd)
+                ) {
+                    drawLine(
+                        color = Color(0xFF1E1E1E),
+                        start = Offset(0f, size.height),
+                        end = Offset(size.width, 0f),
+                        strokeWidth = 6.dp.toPx()
+                    )
                 }
             }
 

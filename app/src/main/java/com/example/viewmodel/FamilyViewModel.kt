@@ -1105,7 +1105,9 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun saveBase64Image(base64Str: String, index: Int = 0): String? {
         return try {
-            val bytes = android.util.Base64.decode(base64Str, android.util.Base64.NO_WRAP)
+            val cleanB64 = base64Str.substringAfter("base64,").trim()
+            if (cleanB64.isBlank()) return null
+            val bytes = android.util.Base64.decode(cleanB64, android.util.Base64.DEFAULT)
             val directory = java.io.File(getApplication<Application>().filesDir, "photos")
             if (!directory.exists()) {
                 directory.mkdirs()
@@ -1346,28 +1348,57 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 return@launch
             }
             try {
-                val backupObj = org.json.JSONObject(jsonString)
+                var sanitized = jsonString.trim().removePrefix("\uFEFF")
+                if (sanitized.startsWith("```")) {
+                    sanitized = sanitized.lines()
+                        .filterNot { it.trim().startsWith("```") }
+                        .joinToString("\n")
+                        .trim()
+                }
+
+                if (sanitized.isBlank()) {
+                    withContext(Dispatchers.Main) { onComplete(false, "محتوای فایل پشتیبان خالی است.") }
+                    return@launch
+                }
+
+                val backupObj = if (sanitized.startsWith("[")) {
+                    org.json.JSONObject().apply {
+                        put("persons", org.json.JSONArray(sanitized))
+                        put("relationships", org.json.JSONArray())
+                    }
+                } else {
+                    org.json.JSONObject(sanitized)
+                }
                 
-                if (!backupObj.has("persons") || !backupObj.has("relationships")) {
-                    withContext(Dispatchers.Main) { onComplete(false, "ساختار فایل پشتیبان نامعتبر است.") }
+                val personsArr = when {
+                    backupObj.has("persons") -> backupObj.getJSONArray("persons")
+                    backupObj.has("members") -> backupObj.getJSONArray("members")
+                    backupObj.has("people") -> backupObj.getJSONArray("people")
+                    else -> org.json.JSONArray()
+                }
+                val relsArr = when {
+                    backupObj.has("relationships") -> backupObj.getJSONArray("relationships")
+                    backupObj.has("relations") -> backupObj.getJSONArray("relations")
+                    else -> org.json.JSONArray()
+                }
+                val groupsArr = if (backupObj.has("groups")) backupObj.getJSONArray("groups") else org.json.JSONArray()
+                val foldersArr = if (backupObj.has("folders")) backupObj.getJSONArray("folders") else org.json.JSONArray()
+
+                if (personsArr.length() == 0 && groupsArr.length() == 0 && foldersArr.length() == 0) {
+                    withContext(Dispatchers.Main) { onComplete(false, "ساختار فایل پشتیبان نامعتبر یا فاقد اطلاعات است.") }
                     return@launch
                 }
                 
-                val personsArr = backupObj.getJSONArray("persons")
-                val relsArr = backupObj.getJSONArray("relationships")
-                val groupsArr = if (backupObj.has("groups")) backupObj.getJSONArray("groups") else org.json.JSONArray()
-                val foldersArr = if (backupObj.has("folders")) backupObj.getJSONArray("folders") else org.json.JSONArray()
-                
                 // Restore Settings
-                if (backupObj.has("settings")) {
-                    val settingsObj = backupObj.getJSONObject("settings")
-                    if (settingsObj.has("treeLayout")) {
-                        val layout = settingsObj.getString("treeLayout")
-                        setTreeLayout(layout)
-                    }
-                    if (settingsObj.has("treeTheme")) {
-                        val theme = settingsObj.getString("treeTheme")
-                        setTreeTheme(theme)
+                if (backupObj.has("settings") && !backupObj.isNull("settings")) {
+                    val settingsObj = backupObj.optJSONObject("settings")
+                    if (settingsObj != null) {
+                        if (settingsObj.has("treeLayout")) {
+                            setTreeLayout(settingsObj.optString("treeLayout", treeLayout.value))
+                        }
+                        if (settingsObj.has("treeTheme")) {
+                            setTreeTheme(settingsObj.optString("treeTheme", treeTheme.value))
+                        }
                     }
                 }
                 
@@ -1379,7 +1410,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 // 1. Restore Folders
                 val folderListToImport = mutableListOf<org.json.JSONObject>()
                 for (i in 0 until foldersArr.length()) {
-                    folderListToImport.add(foldersArr.getJSONObject(i))
+                    foldersArr.optJSONObject(i)?.let { folderListToImport.add(it) }
                 }
                 val remainingFolders = folderListToImport.toMutableList()
                 var passCount = 0
@@ -1388,48 +1419,58 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     val iterator = remainingFolders.iterator()
                     while (iterator.hasNext()) {
                         val fObj = iterator.next()
-                        val oldId = fObj.getLong("id")
-                        val name = fObj.getString("name")
-                        val oldParentId = if (fObj.isNull("parentId")) null else fObj.getLong("parentId")
-                        val displayOrder = if (fObj.has("displayOrder")) fObj.getInt("displayOrder") else 0
+                        val oldId = fObj.optLong("id", -1L)
+                        val name = fObj.optString("name", "پوشه")
+                        val oldParentId = if (fObj.isNull("parentId") || !fObj.has("parentId")) null else fObj.optLong("parentId", -1L).takeIf { it != -1L }
+                        val displayOrder = fObj.optInt("displayOrder", 0)
 
                         if (oldParentId == null || oldToNewFolderIdMap.containsKey(oldParentId)) {
                             val newParentId = if (oldParentId != null) oldToNewFolderIdMap[oldParentId] else targetFolderId
                             val newFolderId = repo.insertFolder(
                                 com.example.data.FamilyFolder(id = 0, name = name, parentId = newParentId, displayOrder = displayOrder)
                             )
-                            oldToNewFolderIdMap[oldId] = newFolderId
+                            if (oldId != -1L) {
+                                oldToNewFolderIdMap[oldId] = newFolderId
+                            }
                             iterator.remove()
                         }
                     }
                 }
                 for (fObj in remainingFolders) {
-                    val oldId = fObj.getLong("id")
-                    val name = fObj.getString("name")
-                    val displayOrder = if (fObj.has("displayOrder")) fObj.getInt("displayOrder") else 0
+                    val oldId = fObj.optLong("id", -1L)
+                    val name = fObj.optString("name", "پوشه")
+                    val displayOrder = fObj.optInt("displayOrder", 0)
                     val newFolderId = repo.insertFolder(
                         com.example.data.FamilyFolder(id = 0, name = name, parentId = targetFolderId, displayOrder = displayOrder)
                     )
-                    oldToNewFolderIdMap[oldId] = newFolderId
+                    if (oldId != -1L) {
+                        oldToNewFolderIdMap[oldId] = newFolderId
+                    }
                 }
 
                 // 2. Restore Groups
                 if (groupsArr.length() > 0) {
                     for (i in 0 until groupsArr.length()) {
-                        val gObj = groupsArr.getJSONObject(i)
-                        val oldId = gObj.getLong("id")
-                        val name = gObj.getString("name")
-                        val description = if (gObj.isNull("description")) null else gObj.getString("description")
-                        val displayOrder = if (gObj.has("displayOrder")) gObj.getInt("displayOrder") else 0
-                        val oldFolderId = if (gObj.has("folderId") && !gObj.isNull("folderId")) gObj.getLong("folderId") else null
+                        val gObj = groupsArr.optJSONObject(i) ?: continue
+                        val oldId = gObj.optLong("id", -1L)
+                        val name = gObj.optString("name", "گروه فامیلی")
+                        val description = if (gObj.isNull("description") || !gObj.has("description")) null else gObj.optString("description", null)
+                        val displayOrder = gObj.optInt("displayOrder", 0)
+                        val oldFolderId = if (gObj.has("folderId") && !gObj.isNull("folderId")) gObj.optLong("folderId", -1L).takeIf { it != -1L } else null
                         val newFolderId = if (oldFolderId != null) (oldToNewFolderIdMap[oldFolderId] ?: targetFolderId) else targetFolderId
                         
                         val newId = repo.insertGroup(
                             com.example.data.FamilyGroup(id = 0, name = name, description = description, displayOrder = displayOrder, folderId = newFolderId)
                         )
-                        oldToNewGroupIdMap[oldId] = newId
+                        if (oldId != -1L) {
+                            oldToNewGroupIdMap[oldId] = newId
+                        }
                     }
-                } else if (targetGroupId == null) {
+                }
+
+                if (targetGroupId != null) {
+                    oldToNewGroupIdMap[-1L] = targetGroupId
+                } else if (oldToNewGroupIdMap.isEmpty()) {
                     val rootFolderName = backupObj.optString("rootFolderName", "")
                     val rootPersonName = backupObj.optString("rootPersonName", "")
                     val defaultGroupName = if (rootPersonName.isNotBlank()) "شجره‌نامه $rootPersonName" else if (rootFolderName.isNotBlank()) "پوشه $rootFolderName" else "خاندان بازگردانی‌شده"
@@ -1443,22 +1484,22 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 var anyOldDanglingPhotosFound = false
 
                 for (i in 0 until personsArr.length()) {
-                    val pObj = personsArr.getJSONObject(i)
-                    val oldId = pObj.getLong("id")
-                    val firstName = pObj.getString("firstName")
-                    val lastName = pObj.getString("lastName")
-                    val gender = pObj.getString("gender")
-                    val birthDate = if (pObj.isNull("birthDate")) null else pObj.getString("birthDate")
-                    val birthPlace = if (pObj.isNull("birthPlace")) null else pObj.getString("birthPlace")
-                    val deathDate = if (pObj.isNull("deathDate")) null else pObj.getString("deathDate")
-                    val deathPlace = if (pObj.isNull("deathPlace")) null else pObj.getString("deathPlace")
-                    val isDeceased = pObj.getBoolean("isDeceased")
-                    val occupation = if (pObj.isNull("occupation")) null else pObj.getString("occupation")
-                    val biography = if (pObj.isNull("biography")) null else pObj.getString("biography")
-                    val originalPhotoUri = if (pObj.isNull("photoUri")) null else pObj.getString("photoUri")
-                    val generation = pObj.getInt("generation")
+                    val pObj = personsArr.optJSONObject(i) ?: continue
+                    val oldId = pObj.optLong("id", (i + 1).toLong())
+                    val firstName = pObj.optString("firstName", "").ifBlank { pObj.optString("name", "عضو") }
+                    val lastName = pObj.optString("lastName", "")
+                    val gender = pObj.optString("gender", "Male")
+                    val birthDate = if (pObj.isNull("birthDate") || !pObj.has("birthDate")) null else pObj.optString("birthDate", null)
+                    val birthPlace = if (pObj.isNull("birthPlace") || !pObj.has("birthPlace")) null else pObj.optString("birthPlace", null)
+                    val deathDate = if (pObj.isNull("deathDate") || !pObj.has("deathDate")) null else pObj.optString("deathDate", null)
+                    val deathPlace = if (pObj.isNull("deathPlace") || !pObj.has("deathPlace")) null else pObj.optString("deathPlace", null)
+                    val isDeceased = pObj.optBoolean("isDeceased", false)
+                    val occupation = if (pObj.isNull("occupation") || !pObj.has("occupation")) null else pObj.optString("occupation", null)
+                    val biography = if (pObj.isNull("biography") || !pObj.has("biography")) null else pObj.optString("biography", null)
+                    val originalPhotoUri = if (pObj.isNull("photoUri") || !pObj.has("photoUri")) null else pObj.optString("photoUri", null)
+                    val generation = pObj.optInt("generation", 1)
                     
-                    val oldGroupId = if (pObj.isNull("groupId")) null else pObj.getLong("groupId")
+                    val oldGroupId = if (pObj.isNull("groupId") || !pObj.has("groupId")) null else pObj.optLong("groupId", -1L).takeIf { it != -1L }
                     val newGroupId = if (targetGroupId != null) {
                         targetGroupId
                     } else if (oldGroupId != null) {
@@ -1469,20 +1510,25 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     
                     // Restore photos from Base64
                     var restoredPhotoUri: String? = null
-                    if (pObj.has("photosBase64") && pObj.getJSONArray("photosBase64").length() > 0) {
-                        val photosBase64Arr = pObj.getJSONArray("photosBase64")
-                        val restoredPaths = mutableListOf<String>()
-                        for (j in 0 until photosBase64Arr.length()) {
-                            val b64 = photosBase64Arr.getString(j)
-                            val savedPath = saveBase64Image(b64, j)
-                            if (savedPath != null) {
-                                restoredPaths.add(savedPath)
+                    if (pObj.has("photosBase64") && !pObj.isNull("photosBase64")) {
+                        val photosBase64Arr = pObj.optJSONArray("photosBase64")
+                        if (photosBase64Arr != null && photosBase64Arr.length() > 0) {
+                            val restoredPaths = mutableListOf<String>()
+                            for (j in 0 until photosBase64Arr.length()) {
+                                val b64 = photosBase64Arr.optString(j, "")
+                                if (b64.isNotBlank()) {
+                                    val savedPath = saveBase64Image(b64, j)
+                                    if (savedPath != null) {
+                                        restoredPaths.add(savedPath)
+                                    }
+                                }
+                            }
+                            if (restoredPaths.isNotEmpty()) {
+                                restoredPhotoUri = restoredPaths.joinToString("|")
                             }
                         }
-                        if (restoredPaths.isNotEmpty()) {
-                            restoredPhotoUri = restoredPaths.joinToString("|")
-                        }
-                    } else if (!originalPhotoUri.isNullOrBlank()) {
+                    }
+                    if (restoredPhotoUri == null && !originalPhotoUri.isNullOrBlank()) {
                         val urisList = originalPhotoUri.split('|').filter { it.isNotBlank() }
                         val validLocalPaths = mutableListOf<String>()
                         for (path in urisList) {
@@ -1494,8 +1540,6 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         }
                         if (validLocalPaths.isNotEmpty()) {
                             restoredPhotoUri = validLocalPaths.joinToString("|")
-                        } else {
-                            restoredPhotoUri = null
                         }
                     }
                     
@@ -1521,10 +1565,10 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 
                 for (i in 0 until relsArr.length()) {
-                    val rObj = relsArr.getJSONObject(i)
-                    val oldP1 = rObj.getLong("personId1")
-                    val oldP2 = rObj.getLong("personId2")
-                    val type = rObj.getString("type")
+                    val rObj = relsArr.optJSONObject(i) ?: continue
+                    val oldP1 = rObj.optLong("personId1", -1L)
+                    val oldP2 = rObj.optLong("personId2", -1L)
+                    val type = rObj.optString("type", "Spouse")
                     
                     val newP1 = oldToNewPersonIdMap[oldP1]
                     val newP2 = oldToNewPersonIdMap[oldP2]
@@ -1678,15 +1722,45 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 return@launch
             }
             try {
-                val backupObj = org.json.JSONObject(jsonString)
-                
-                if (!backupObj.has("persons") || !backupObj.has("relationships")) {
-                    withContext(Dispatchers.Main) { onComplete(false, "ساختار فایل پشتیبان نامعتبر است.", null) }
+                var sanitized = jsonString.trim().removePrefix("\uFEFF")
+                if (sanitized.startsWith("```")) {
+                    sanitized = sanitized.lines()
+                        .filterNot { it.trim().startsWith("```") }
+                        .joinToString("\n")
+                        .trim()
+                }
+
+                if (sanitized.isBlank()) {
+                    withContext(Dispatchers.Main) { onComplete(false, "محتوای فایل پشتیبان خالی است.", null) }
                     return@launch
                 }
+
+                val backupObj = if (sanitized.startsWith("[")) {
+                    org.json.JSONObject().apply {
+                        put("persons", org.json.JSONArray(sanitized))
+                        put("relationships", org.json.JSONArray())
+                    }
+                } else {
+                    org.json.JSONObject(sanitized)
+                }
                 
-                val personsArr = backupObj.getJSONArray("persons")
-                val relsArr = backupObj.getJSONArray("relationships")
+                val personsArr = when {
+                    backupObj.has("persons") -> backupObj.getJSONArray("persons")
+                    backupObj.has("members") -> backupObj.getJSONArray("members")
+                    backupObj.has("people") -> backupObj.getJSONArray("people")
+                    else -> org.json.JSONArray()
+                }
+                val relsArr = when {
+                    backupObj.has("relationships") -> backupObj.getJSONArray("relationships")
+                    backupObj.has("relations") -> backupObj.getJSONArray("relations")
+                    else -> org.json.JSONArray()
+                }
+
+                if (personsArr.length() == 0) {
+                    withContext(Dispatchers.Main) { onComplete(false, "ساختار فایل پشتیبان نامعتبر یا فاقد اطلاعات است.", null) }
+                    return@launch
+                }
+
                 val rootPersonName = backupObj.optString("rootPersonName", "عضو")
                 
                 // Create a new group inside targetFolderId
@@ -1705,8 +1779,8 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 // Find min generation to normalize them starting from 0
                 var minGen = Int.MAX_VALUE
                 for (i in 0 until personsArr.length()) {
-                    val pObj = personsArr.getJSONObject(i)
-                    val gen = pObj.getInt("generation")
+                    val pObj = personsArr.optJSONObject(i) ?: continue
+                    val gen = pObj.optInt("generation", 1)
                     if (gen < minGen) {
                         minGen = gen
                     }
@@ -1716,40 +1790,45 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 var anyOldDanglingPhotosFound = false
 
                 for (i in 0 until personsArr.length()) {
-                    val pObj = personsArr.getJSONObject(i)
-                    val oldId = pObj.getLong("id")
-                    val firstName = pObj.getString("firstName")
-                    val lastName = pObj.getString("lastName")
-                    val gender = pObj.getString("gender")
-                    val birthDate = if (pObj.isNull("birthDate")) null else pObj.getString("birthDate")
-                    val birthPlace = if (pObj.isNull("birthPlace")) null else pObj.getString("birthPlace")
-                    val deathDate = if (pObj.isNull("deathDate")) null else pObj.getString("deathDate")
-                    val deathPlace = if (pObj.isNull("deathPlace")) null else pObj.getString("deathPlace")
-                    val isDeceased = pObj.getBoolean("isDeceased")
-                    val occupation = if (pObj.isNull("occupation")) null else pObj.getString("occupation")
-                    val biography = if (pObj.isNull("biography")) null else pObj.getString("biography")
-                    val originalPhotoUri = if (pObj.isNull("photoUri")) null else pObj.getString("photoUri")
-                    val generation = pObj.getInt("generation")
+                    val pObj = personsArr.optJSONObject(i) ?: continue
+                    val oldId = pObj.optLong("id", (i + 1).toLong())
+                    val firstName = pObj.optString("firstName", "").ifBlank { pObj.optString("name", "عضو") }
+                    val lastName = pObj.optString("lastName", "")
+                    val gender = pObj.optString("gender", "Male")
+                    val birthDate = if (pObj.isNull("birthDate") || !pObj.has("birthDate")) null else pObj.optString("birthDate", null)
+                    val birthPlace = if (pObj.isNull("birthPlace") || !pObj.has("birthPlace")) null else pObj.optString("birthPlace", null)
+                    val deathDate = if (pObj.isNull("deathDate") || !pObj.has("deathDate")) null else pObj.optString("deathDate", null)
+                    val deathPlace = if (pObj.isNull("deathPlace") || !pObj.has("deathPlace")) null else pObj.optString("deathPlace", null)
+                    val isDeceased = pObj.optBoolean("isDeceased", false)
+                    val occupation = if (pObj.isNull("occupation") || !pObj.has("occupation")) null else pObj.optString("occupation", null)
+                    val biography = if (pObj.isNull("biography") || !pObj.has("biography")) null else pObj.optString("biography", null)
+                    val originalPhotoUri = if (pObj.isNull("photoUri") || !pObj.has("photoUri")) null else pObj.optString("photoUri", null)
+                    val generation = pObj.optInt("generation", 1)
                     
                     // Normalize generation
                     val normalizedGen = (generation - minGen).coerceAtLeast(0)
                     
                     // Restore photos from Base64
                     var restoredPhotoUri: String? = null
-                    if (pObj.has("photosBase64") && pObj.getJSONArray("photosBase64").length() > 0) {
-                        val photosBase64Arr = pObj.getJSONArray("photosBase64")
-                        val restoredPaths = mutableListOf<String>()
-                        for (j in 0 until photosBase64Arr.length()) {
-                            val b64 = photosBase64Arr.getString(j)
-                            val savedPath = saveBase64Image(b64, j)
-                            if (savedPath != null) {
-                                restoredPaths.add(savedPath)
+                    if (pObj.has("photosBase64") && !pObj.isNull("photosBase64")) {
+                        val photosBase64Arr = pObj.optJSONArray("photosBase64")
+                        if (photosBase64Arr != null && photosBase64Arr.length() > 0) {
+                            val restoredPaths = mutableListOf<String>()
+                            for (j in 0 until photosBase64Arr.length()) {
+                                val b64 = photosBase64Arr.optString(j, "")
+                                if (b64.isNotBlank()) {
+                                    val savedPath = saveBase64Image(b64, j)
+                                    if (savedPath != null) {
+                                        restoredPaths.add(savedPath)
+                                    }
+                                }
+                            }
+                            if (restoredPaths.isNotEmpty()) {
+                                restoredPhotoUri = restoredPaths.joinToString("|")
                             }
                         }
-                        if (restoredPaths.isNotEmpty()) {
-                            restoredPhotoUri = restoredPaths.joinToString("|")
-                        }
-                    } else if (!originalPhotoUri.isNullOrBlank()) {
+                    }
+                    if (restoredPhotoUri == null && !originalPhotoUri.isNullOrBlank()) {
                         val urisList = originalPhotoUri.split('|').filter { it.isNotBlank() }
                         val validLocalPaths = mutableListOf<String>()
                         for (path in urisList) {
@@ -1761,8 +1840,6 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         }
                         if (validLocalPaths.isNotEmpty()) {
                             restoredPhotoUri = validLocalPaths.joinToString("|")
-                        } else {
-                            restoredPhotoUri = null
                         }
                     }
 
@@ -1788,10 +1865,10 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 
                 for (i in 0 until relsArr.length()) {
-                    val rObj = relsArr.getJSONObject(i)
-                    val oldP1 = rObj.getLong("personId1")
-                    val oldP2 = rObj.getLong("personId2")
-                    val type = rObj.getString("type")
+                    val rObj = relsArr.optJSONObject(i) ?: continue
+                    val oldP1 = rObj.optLong("personId1", -1L)
+                    val oldP2 = rObj.optLong("personId2", -1L)
+                    val type = rObj.optString("type", "Spouse")
                     
                     val newP1 = oldToNewIdMap[oldP1]
                     val newP2 = oldToNewIdMap[oldP2]

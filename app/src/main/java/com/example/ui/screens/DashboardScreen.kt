@@ -3999,7 +3999,8 @@ $databaseError
                     }
             ) {
                 CompositionLocalProvider(
-                    LocalDensity provides Density(density = exportDensity, fontScale = 1.0f)
+                    LocalDensity provides Density(density = exportDensity, fontScale = 1.0f),
+                    LocalLayoutDirection provides LayoutDirection.Rtl
                 ) {
                     FamilyTreeContent(
                         persons = exportPersons,
