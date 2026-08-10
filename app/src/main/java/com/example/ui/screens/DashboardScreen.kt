@@ -802,10 +802,13 @@ $databaseError
                                         )
                                         Spacer(modifier = Modifier.height(20.dp))
                                         Row(
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
                                             Button(
                                                 onClick = { showAddFolderDialog = true },
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
                                                 colors = ButtonDefaults.buttonColors(
                                                     containerColor = Color(0xFFFFF3E0),
                                                     contentColor = Color(0xFFE65100)
@@ -813,12 +816,14 @@ $databaseError
                                                 shape = RoundedCornerShape(12.dp)
                                             ) {
                                                 Icon(TablerIcons.FolderPlus, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("ایجاد زیرپوشه", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("زیرپوشه", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             }
 
                                             Button(
                                                 onClick = { showAddGroupDialog = true },
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
                                                 colors = ButtonDefaults.buttonColors(
                                                     containerColor = accentColor,
                                                     contentColor = Color.White
@@ -826,8 +831,8 @@ $databaseError
                                                 shape = RoundedCornerShape(12.dp)
                                             ) {
                                                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("ایجاد گروه فامیلی", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("گروه فامیلی", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             }
                                         }
                                     }
@@ -3926,7 +3931,7 @@ private fun FolderCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -3935,7 +3940,7 @@ private fun FolderCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(32.dp)
                         .background(Color(0xFFFFF3E0), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
@@ -3943,20 +3948,20 @@ private fun FolderCard(
                         imageVector = TablerIcons.Folder,
                         contentDescription = null,
                         tint = Color(0xFFF57C00),
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
                 Box {
                     IconButton(
                         onClick = { menuExpanded = true },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
                             imageVector = TablerIcons.DotsVertical,
                             contentDescription = "گزینه‌های پوشه",
                             tint = Color.Gray,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
 
@@ -4014,11 +4019,11 @@ private fun FolderCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
                 text = folder.name,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = textColor,
                 maxLines = 1,
@@ -4035,7 +4040,7 @@ private fun FolderCard(
 
             Text(
                 text = subtitle,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 color = Color.Gray,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -4068,7 +4073,7 @@ private fun FamilyGroupCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -4077,7 +4082,7 @@ private fun FamilyGroupCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(32.dp)
                         .background(accentColor.copy(alpha = 0.15f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
@@ -4085,20 +4090,20 @@ private fun FamilyGroupCard(
                         imageVector = Icons.Default.Groups,
                         contentDescription = null,
                         tint = accentColor,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
                 Box {
                     IconButton(
                         onClick = { menuExpanded = true },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
                             imageVector = TablerIcons.DotsVertical,
                             contentDescription = "گزینه‌های گروه فامیلی",
                             tint = Color.Gray,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
 
@@ -4156,11 +4161,11 @@ private fun FamilyGroupCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
                 text = group.name,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = textColor,
                 maxLines = 1,
@@ -4171,7 +4176,7 @@ private fun FamilyGroupCard(
 
             Text(
                 text = "${memberCount.toString().toFarsiNumbers()} عضو",
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 color = Color.Gray,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
