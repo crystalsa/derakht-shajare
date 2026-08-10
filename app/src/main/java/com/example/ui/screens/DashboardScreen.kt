@@ -60,6 +60,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -148,7 +151,8 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     var showAddFolderDialog by remember { mutableStateOf(false) }
     var folderToEdit by remember { mutableStateOf<com.example.data.FamilyFolder?>(null) }
     var folderToDeleteWarning by remember { mutableStateOf<com.example.data.FamilyFolder?>(null) }
-    var showFolderExplorerDialog by remember { mutableStateOf(false) }
+    var isViewingTree by remember { mutableStateOf(false) }
+    var fabExpanded by remember { mutableStateOf(false) }
     var moveCopyTargetItem by remember { mutableStateOf<Pair<Any, Boolean>?>(null) } // Pair(item, isFolder)
     var isCopyOperation by remember { mutableStateOf(false) }
 
@@ -501,13 +505,64 @@ $databaseError
             }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddPersonTrigger,
-                containerColor = accentColor,
-                contentColor = if (currentTheme == "Dark Gold") Color.Black else Color.White,
-                modifier = Modifier.testTag("add_member_fab")
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "افزودن عضو")
+            if (activeTab == "Tree" && !isViewingTree) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AnimatedVisibility(
+                        visible = fabExpanded,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ExtendedFloatingActionButton(
+                                text = { Text("+ پوشه جدید", fontWeight = FontWeight.Bold) },
+                                icon = { Icon(TablerIcons.FolderPlus, contentDescription = null) },
+                                onClick = {
+                                    fabExpanded = false
+                                    showAddFolderDialog = true
+                                },
+                                containerColor = Color(0xFFFFF3E0),
+                                contentColor = Color(0xFFE65100)
+                            )
+
+                            ExtendedFloatingActionButton(
+                                text = { Text("+ گروه فامیلی جدید", fontWeight = FontWeight.Bold) },
+                                icon = { Icon(TablerIcons.UserPlus, contentDescription = null) },
+                                onClick = {
+                                    fabExpanded = false
+                                    showAddGroupDialog = true
+                                },
+                                containerColor = Color(0xFFE8F5E9),
+                                contentColor = Color(0xFF2E7D32)
+                            )
+                        }
+                    }
+
+                    FloatingActionButton(
+                        onClick = { fabExpanded = !fabExpanded },
+                        containerColor = accentColor,
+                        contentColor = Color.White
+                    ) {
+                        Icon(
+                            imageVector = if (fabExpanded) Icons.Default.Close else Icons.Default.Add,
+                            contentDescription = "افزودن پوشه یا گروه فامیلی"
+                        )
+                    }
+                }
+            } else {
+                FloatingActionButton(
+                    onClick = onAddPersonTrigger,
+                    containerColor = accentColor,
+                    contentColor = if (currentTheme == "Dark Gold") Color.Black else Color.White,
+                    modifier = Modifier.testTag("add_member_fab")
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "افزودن عضو")
+                }
             }
         },
         containerColor = bgColor
@@ -517,18 +572,19 @@ $databaseError
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Folder & Group Navigation Section
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 2.dp)
+            // Folder Breadcrumb & Navigation Header
+            Surface(
+                color = Color.White,
+                tonalElevation = 2.dp,
+                shadowElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // Breadcrumb Bar
                 val breadcrumbs = remember(allFolders, currentFolderId) { viewModel.getFolderBreadcrumbs(currentFolderId) }
 
-                
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -540,227 +596,93 @@ $databaseError
                             .horizontalScroll(rememberScrollState())
                     ) {
                         Surface(
-                            onClick = { viewModel.setCurrentFolderId(null) },
-                            color = if (currentFolderId == null) accentColor.copy(alpha = 0.15f) else Color.Transparent,
+                            onClick = {
+                                viewModel.setCurrentFolderId(null)
+                                isViewingTree = false
+                            },
+                            color = if (currentFolderId == null && !isViewingTree) accentColor.copy(alpha = 0.15f) else Color.Transparent,
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Home, contentDescription = null, tint = if (currentFolderId == null) accentColor else Color.Gray, modifier = Modifier.size(14.dp))
+                                Icon(
+                                    Icons.Default.Home,
+                                    contentDescription = null,
+                                    tint = if (currentFolderId == null && !isViewingTree) accentColor else Color.Gray,
+                                    modifier = Modifier.size(16.dp)
+                                )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("خانه", fontSize = 11.sp, fontWeight = if (currentFolderId == null) FontWeight.Bold else FontWeight.Normal, color = if (currentFolderId == null) accentColor else textColor)
+                                Text(
+                                    "خانه",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (currentFolderId == null && !isViewingTree) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (currentFolderId == null && !isViewingTree) accentColor else textColor
+                                )
                             }
                         }
 
                         breadcrumbs.forEach { folder ->
-                            Text(" > ", fontSize = 11.sp, color = Color.Gray)
+                            Text(" > ", fontSize = 12.sp, color = Color.Gray)
                             Surface(
-                                onClick = { viewModel.setCurrentFolderId(folder.id) },
-                                color = if (currentFolderId == folder.id) accentColor.copy(alpha = 0.15f) else Color.Transparent,
+                                onClick = {
+                                    viewModel.setCurrentFolderId(folder.id)
+                                    isViewingTree = false
+                                },
+                                color = if (currentFolderId == folder.id && !isViewingTree) accentColor.copy(alpha = 0.15f) else Color.Transparent,
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Folder, contentDescription = null, tint = Color(0xFFF57C00), modifier = Modifier.size(14.dp))
+                                    Icon(
+                                        TablerIcons.Folder,
+                                        contentDescription = null,
+                                        tint = Color(0xFFF57C00),
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text(folder.name, fontSize = 11.sp, fontWeight = if (currentFolderId == folder.id) FontWeight.Bold else FontWeight.Normal, color = if (currentFolderId == folder.id) accentColor else textColor)
+                                    Text(
+                                        folder.name,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (currentFolderId == folder.id && !isViewingTree) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (currentFolderId == folder.id && !isViewingTree) accentColor else textColor
+                                    )
                                 }
                             }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Scrollable Subfolders & Groups Chips Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Edit active group button
-                    if (selectedGroupId != null) {
-                        val currentGroup = allGroups.find { it.id == selectedGroupId }
-                        if (currentGroup != null) {
-                            IconButton(
-                                onClick = { groupToEdit = currentGroup },
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .background(accentColor.copy(alpha = 0.15f), CircleShape)
+                    // Back to Folders button when viewing a tree
+                    if (isViewingTree) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            onClick = { isViewingTree = false },
+                            color = accentColor.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, accentColor)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "ویرایش مشخصات گروه فعلی",
+                                    TablerIcons.Folder,
+                                    contentDescription = null,
                                     tint = accentColor,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(16.dp)
                                 )
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Render Subfolders Chips
-                        currentSubfolders.forEach { folder ->
-                            var menuExpanded by remember { mutableStateOf(false) }
-
-                            Box {
-                                Surface(
-                                    onClick = { viewModel.setCurrentFolderId(folder.id) },
-                                    color = Color(0xFFFFF8E1),
-                                    shape = RoundedCornerShape(16.dp),
-                                    border = BorderStroke(1.dp, Color(0xFFFFB74D))
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 5.dp, bottom = 5.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(TablerIcons.Folder, contentDescription = null, tint = Color(0xFFE65100), modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(folder.name, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Box(
-                                            modifier = Modifier
-                                                .size(20.dp)
-                                                .clip(CircleShape)
-                                                .clickable { menuExpanded = true },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(TablerIcons.DotsVertical, contentDescription = null, tint = Color(0xFFE65100), modifier = Modifier.size(14.dp))
-                                        }
-                                    }
-                                }
-
-                                DropdownMenu(
-                                    expanded = menuExpanded,
-                                    onDismissRequest = { menuExpanded = false },
-                                    shape = RoundedCornerShape(18.dp),
-                                    containerColor = Color.White,
-                                    tonalElevation = 8.dp,
-                                    shadowElevation = 10.dp,
-                                    border = BorderStroke(1.5.dp, Color(0xFFFFB74D))
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("ورود به پوشه") },
-                                        leadingIcon = { Icon(TablerIcons.Folder, contentDescription = null) },
-                                        onClick = {
-                                            menuExpanded = false
-                                            viewModel.setCurrentFolderId(folder.id)
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("تغییر نام") },
-                                        leadingIcon = { Icon(TablerIcons.Pencil, contentDescription = null) },
-                                        onClick = {
-                                            menuExpanded = false
-                                            folderToEdit = folder
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("انتقال پوشه") },
-                                        leadingIcon = { Icon(TablerIcons.FolderMinus, contentDescription = null) },
-                                        onClick = {
-                                            menuExpanded = false
-                                            moveCopyTargetItem = Pair(folder, true)
-                                            isCopyOperation = false
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("کپی پوشه") },
-                                        leadingIcon = { Icon(TablerIcons.Copy, contentDescription = null) },
-                                        onClick = {
-                                            menuExpanded = false
-                                            moveCopyTargetItem = Pair(folder, true)
-                                            isCopyOperation = true
-                                        }
-                                    )
-                                    HorizontalDivider()
-                                    DropdownMenuItem(
-                                        text = { Text("حذف پوشه", color = Color.Red) },
-                                        leadingIcon = { Icon(TablerIcons.Trash, contentDescription = null, tint = Color.Red) },
-                                        onClick = {
-                                            menuExpanded = false
-                                            if (viewModel.isFolderEmpty(folder.id)) {
-                                                viewModel.deleteFolder(folder)
-                                                Toast.makeText(context, "پوشه حذف گردید", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                folderToDeleteWarning = folder
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        // Render Groups Chips in active folder
-                        orderedGroupsList.forEachIndexed { index, group ->
-                            val isSelected = selectedGroupId == group.id
-                            var menuExpanded by remember { mutableStateOf(false) }
-
-                            Box {
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { viewModel.setSelectedGroupId(group.id) },
-                                    label = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                Icons.Default.Groups,
-                                                contentDescription = null,
-                                                tint = if (isSelected) Color.White else accentColor,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(group.name, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-                                        }
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = accentColor,
-                                        selectedLabelColor = Color.White,
-                                        containerColor = Color.White,
-                                        labelColor = textColor
-                                    ),
-                                    border = FilterChipDefaults.filterChipBorder(
-                                        enabled = true,
-                                        selected = isSelected,
-                                        borderColor = lineEffectColor,
-                                        selectedBorderColor = accentColor
-                                    )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "بازگشت به پوشه‌ها",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = accentColor
                                 )
                             }
                         }
-
-                        // Add Folder Chip
-                        InputChip(
-                            selected = false,
-                            onClick = { showAddFolderDialog = true },
-                            label = { Text("+ پوشه", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            colors = InputChipDefaults.inputChipColors(
-                                containerColor = Color(0xFFFFF3E0),
-                                labelColor = Color(0xFFE65100)
-                            ),
-                            border = BorderStroke(1.dp, Color(0xFFFFB74D))
-                        )
-
-                        // Add Group Chip
-                        InputChip(
-                            selected = false,
-                            onClick = { showAddGroupDialog = true },
-                            label = { Text("+ گروه فامیلی", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            colors = InputChipDefaults.inputChipColors(
-                                containerColor = Color(0xFFE8F5E9),
-                                labelColor = Color(0xFF2E7D32)
-                            ),
-                            border = BorderStroke(1.dp, Color(0xFFA5D6A7))
-                        )
                     }
                 }
             }
@@ -830,190 +752,156 @@ $databaseError
             // Tabs implementation
             Box(modifier = Modifier.fillMaxSize()) {
                 if (activeTab == "Tree") {
-                    if (orderedGroupsList.isEmpty() && currentSubfolders.isEmpty()) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_family_tree_icon),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .alpha(0.55f),
-                            contentScale = ContentScale.Fit
-                        )
-                    }
-                    if (orderedGroupsList.isEmpty()) {
-                        val scrollState = rememberScrollState()
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(scrollState)
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            if (currentSubfolders.isNotEmpty()) {
-                                Surface(
-                                    color = Color(0xFFFFF3E0),
-                                    shape = RoundedCornerShape(16.dp),
-                                    border = BorderStroke(1.dp, Color(0xFFFFB74D))
+                    if (!isViewingTree || selectedGroupId == null) {
+                        // BROWSING MODE: Clean, 2-column grid file manager experience
+                        if (currentSubfolders.isEmpty() && orderedGroupsList.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(0.9f),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                    shape = RoundedCornerShape(24.dp),
+                                    border = BorderStroke(1.dp, lineEffectColor)
                                 ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    Column(
+                                        modifier = Modifier.padding(32.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
                                     ) {
-                                        Icon(
-                                            TablerIcons.Folder,
-                                            contentDescription = null,
-                                            tint = Color(0xFFE65100),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(72.dp)
+                                                .background(Color(0xFFFFF8E1), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = TablerIcons.Folder,
+                                                contentDescription = null,
+                                                tint = Color(0xFFF57C00),
+                                                modifier = Modifier.size(38.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(16.dp))
                                         Text(
-                                            "پوشه‌های موجود در این بخش (" + currentSubfolders.size.toString().toFarsiNumbers() + " پوشه)",
-                                            fontSize = 13.sp,
+                                            text = "این پوشه خالی است",
+                                            fontSize = 17.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFFE65100)
+                                            color = textColor
                                         )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = "هیچ گروه فامیلی یا زیرپوشه‌ای در این بخش وجود ندارد.",
+                                            fontSize = 12.sp,
+                                            color = Color.Gray,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(20.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            Button(
+                                                onClick = { showAddFolderDialog = true },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = Color(0xFFFFF3E0),
+                                                    contentColor = Color(0xFFE65100)
+                                                ),
+                                                shape = RoundedCornerShape(12.dp)
+                                            ) {
+                                                Icon(TablerIcons.FolderPlus, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("ایجاد زیرپوشه", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            Button(
+                                                onClick = { showAddGroupDialog = true },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = accentColor,
+                                                    contentColor = Color.White
+                                                ),
+                                                shape = RoundedCornerShape(12.dp)
+                                            ) {
+                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("ایجاد گروه فامیلی", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
                                     }
                                 }
-
-                                currentSubfolders.forEach { subfolder ->
+                            }
+                        } else {
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(2),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // 1. Render Subfolder Cards
+                                items(currentSubfolders, key = { "folder_${it.id}" }) { subfolder ->
                                     val subCount = allFolders.count { it.parentId == subfolder.id }
                                     val groupCount = allGroups.count { it.folderId == subfolder.id }
 
-                                    Card(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(24.dp))
-                                            .clickable { viewModel.setCurrentFolderId(subfolder.id) },
-                                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                                        border = BorderStroke(1.5.dp, Color(0xFFFFB74D).copy(alpha = 0.5f)),
-                                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(16.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(48.dp)
-                                                        .background(Color(0xFFFFF3E0), CircleShape),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Icon(
-                                                        imageVector = TablerIcons.Folder,
-                                                        contentDescription = null,
-                                                        tint = Color(0xFFE65100),
-                                                        modifier = Modifier.size(26.dp)
-                                                    )
-                                                }
-                                                Spacer(modifier = Modifier.width(14.dp))
-                                                Column {
-                                                    Text(
-                                                        text = subfolder.name,
-                                                        fontSize = 15.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = textColor
-                                                    )
-                                                    Spacer(modifier = Modifier.height(2.dp))
-                                                    Text(
-                                                        text = "شامل " + subCount.toString().toFarsiNumbers() + " زیرپوشه و " + groupCount.toString().toFarsiNumbers() + " گروه فامیلی",
-                                                        fontSize = 11.sp,
-                                                        color = Color.Gray
-                                                    )
-                                                }
+                                    FolderCard(
+                                        folder = subfolder,
+                                        subFolderCount = subCount,
+                                        groupCount = groupCount,
+                                        accentColor = accentColor,
+                                        textColor = textColor,
+                                        onClick = {
+                                            viewModel.setCurrentFolderId(subfolder.id)
+                                            isViewingTree = false
+                                        },
+                                        onEdit = { folderToEdit = subfolder },
+                                        onMove = {
+                                            moveCopyTargetItem = Pair(subfolder, true)
+                                            isCopyOperation = false
+                                        },
+                                        onCopy = {
+                                            moveCopyTargetItem = Pair(subfolder, true)
+                                            isCopyOperation = true
+                                        },
+                                        onDelete = {
+                                            if (viewModel.isFolderEmpty(subfolder.id)) {
+                                                viewModel.deleteFolder(subfolder)
+                                                Toast.makeText(context, "پوشه حذف گردید", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                folderToDeleteWarning = subfolder
                                             }
-
-                                            Icon(
-                                                imageVector = Icons.Default.ChevronLeft,
-                                                contentDescription = "ورود به پوشه",
-                                                tint = Color(0xFFE65100),
-                                                modifier = Modifier.size(22.dp)
-                                            )
                                         }
-                                    }
+                                    )
                                 }
-                            } else {
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.5f)),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                                ) {
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(32.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.Center
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(72.dp)
-                                                    .background(Color(0xFFFFF8E1), CircleShape),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = TablerIcons.Folder,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFFF57C00),
-                                                    modifier = Modifier.size(38.dp)
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                            Text(
-                                                text = "این پوشه خالی است",
-                                                fontSize = 17.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = textColor
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text(
-                                                text = "هیچ گروه فامیلی یا زیرپوشه‌ای در این بخش وجود ندارد.",
-                                                fontSize = 12.sp,
-                                                color = Color.Gray,
-                                                textAlign = TextAlign.Center
-                                            )
-                                            Spacer(modifier = Modifier.height(20.dp))
-                                            Row(
-                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                            ) {
-                                                Button(
-                                                    onClick = { showAddFolderDialog = true },
-                                                    colors = ButtonDefaults.buttonColors(
-                                                        containerColor = Color(0xFFFFF3E0),
-                                                        contentColor = Color(0xFFE65100)
-                                                    ),
-                                                    shape = RoundedCornerShape(12.dp)
-                                                ) {
-                                                    Icon(TablerIcons.FolderPlus, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                    Spacer(modifier = Modifier.width(6.dp))
-                                                    Text("ایجاد زیرپوشه", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                }
 
-                                                Button(
-                                                    onClick = { showAddGroupDialog = true },
-                                                    colors = ButtonDefaults.buttonColors(
-                                                        containerColor = accentColor,
-                                                        contentColor = Color.White
-                                                    ),
-                                                    shape = RoundedCornerShape(12.dp)
-                                                ) {
-                                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                    Spacer(modifier = Modifier.width(6.dp))
-                                                    Text("ایجاد گروه فامیلی", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                }
-                                            }
-                                        }
-                                    }
+                                // 2. Render Family Group Cards
+                                items(orderedGroupsList, key = { "group_${it.id}" }) { group ->
+                                    val memberCount = persons.count { it.groupId == group.id }
+
+                                    FamilyGroupCard(
+                                        group = group,
+                                        memberCount = memberCount,
+                                        accentColor = accentColor,
+                                        textColor = textColor,
+                                        onClick = {
+                                            viewModel.setSelectedGroupId(group.id)
+                                            isViewingTree = true
+                                        },
+                                        onEdit = { groupToEdit = group },
+                                        onMove = {
+                                            moveCopyTargetItem = Pair(group, false)
+                                            isCopyOperation = false
+                                        },
+                                        onCopy = {
+                                            moveCopyTargetItem = Pair(group, false)
+                                            isCopyOperation = true
+                                        },
+                                        onDelete = { groupToDelete = group }
+                                    )
+                                }
                             }
                         }
                     } else if (currentTheme == "Bento Grid" && !isTreeExpanded) {
@@ -2976,50 +2864,6 @@ $databaseError
         )
     }
 
-    if (showFolderExplorerDialog) {
-        FolderExplorerDialog(
-            viewModel = viewModel,
-            allFolders = allFolders,
-            allGroups = allGroups,
-            currentFolderId = currentFolderId,
-            selectedGroupId = selectedGroupId,
-            textColor = textColor,
-            accentColor = accentColor,
-            onDismiss = { showFolderExplorerDialog = false },
-            onSelectGroup = { gId -> viewModel.setSelectedGroupId(gId) },
-            onAddFolder = { parentFId ->
-                viewModel.setCurrentFolderId(parentFId)
-                showAddFolderDialog = true
-            },
-            onAddGroup = { parentFId ->
-                viewModel.setCurrentFolderId(parentFId)
-                showAddGroupDialog = true
-            },
-            onEditFolder = { f -> folderToEdit = f },
-            onEditGroup = { g -> groupToEdit = g },
-            onDeleteFolder = { f ->
-                viewModel.deleteFolder(f) { success ->
-                    if (success) {
-                        Toast.makeText(context, "پوشه با موفقیت حذف شد", Toast.LENGTH_SHORT).show()
-                    } else {
-                        folderToDeleteWarning = f
-                    }
-                }
-            },
-            onDeleteGroup = { g -> groupToDelete = g },
-            onMoveCopyItem = { item, isFolder, isCopy ->
-                moveCopyTargetItem = Pair(item, isFolder)
-                isCopyOperation = isCopy
-            },
-            onBackupFolder = { f ->
-                tempExportFolderId = f.id
-                tempExportGroupId = null
-                backupFileNameInput = "بکاپ_پوشه_${f.name}"
-                showBackupDialog = true
-            }
-        )
-    }
-
     if (showNoGroupsWarningDialog) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             AlertDialog(
@@ -4054,6 +3898,285 @@ $databaseError
             textColor = textColor,
             onDismiss = { showLogsDialog = false }
         )
+    }
+}
+
+@Composable
+private fun FolderCard(
+    folder: com.example.data.FamilyFolder,
+    subFolderCount: Int,
+    groupCount: Int,
+    accentColor: Color,
+    textColor: Color,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onMove: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.5.dp, Color(0xFFFFB74D)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(Color(0xFFFFF3E0), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = TablerIcons.Folder,
+                        contentDescription = null,
+                        tint = Color(0xFFF57C00),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = TablerIcons.DotsVertical,
+                            contentDescription = "گزینه‌های پوشه",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                        shape = RoundedCornerShape(16.dp),
+                        containerColor = Color.White,
+                        tonalElevation = 8.dp,
+                        shadowElevation = 8.dp,
+                        border = BorderStroke(1.dp, Color(0xFFFFB74D))
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("ورود به پوشه") },
+                            leadingIcon = { Icon(TablerIcons.Folder, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onClick()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("تغییر نام") },
+                            leadingIcon = { Icon(TablerIcons.Pencil, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onEdit()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("انتقال پوشه") },
+                            leadingIcon = { Icon(TablerIcons.FolderMinus, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onMove()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("کپی پوشه") },
+                            leadingIcon = { Icon(TablerIcons.Copy, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onCopy()
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("حذف پوشه", color = Color.Red) },
+                            leadingIcon = { Icon(TablerIcons.Trash, contentDescription = null, tint = Color.Red) },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = folder.name,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            val subtitle = if (subFolderCount == 0 && groupCount == 0) {
+                "خالی"
+            } else {
+                "${subFolderCount.toString().toFarsiNumbers()} زیرپوشه ، ${groupCount.toString().toFarsiNumbers()} گروه"
+            }
+
+            Text(
+                text = subtitle,
+                fontSize = 11.sp,
+                color = Color.Gray,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun FamilyGroupCard(
+    group: com.example.data.FamilyGroup,
+    memberCount: Int,
+    accentColor: Color,
+    textColor: Color,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onMove: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.5.dp, accentColor.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(accentColor.copy(alpha = 0.15f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Groups,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = TablerIcons.DotsVertical,
+                            contentDescription = "گزینه‌های گروه فامیلی",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                        shape = RoundedCornerShape(16.dp),
+                        containerColor = Color.White,
+                        tonalElevation = 8.dp,
+                        shadowElevation = 8.dp,
+                        border = BorderStroke(1.dp, accentColor)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("نمایش شجره‌نامه") },
+                            leadingIcon = { Icon(Icons.Default.AccountTree, contentDescription = null, tint = accentColor) },
+                            onClick = {
+                                menuExpanded = false
+                                onClick()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("ویرایش مشخصات") },
+                            leadingIcon = { Icon(TablerIcons.Pencil, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onEdit()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("انتقال به پوشه دیگر") },
+                            leadingIcon = { Icon(TablerIcons.FolderMinus, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onMove()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("کپی گروه") },
+                            leadingIcon = { Icon(TablerIcons.Copy, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onCopy()
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("حذف گروه", color = Color.Red) },
+                            leadingIcon = { Icon(TablerIcons.Trash, contentDescription = null, tint = Color.Red) },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = group.name,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Text(
+                text = "${memberCount.toString().toFarsiNumbers()} عضو",
+                fontSize = 11.sp,
+                color = Color.Gray,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
