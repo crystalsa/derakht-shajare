@@ -134,27 +134,6 @@ fun EditGroupDialog(
                 
                 Divider(modifier = Modifier.padding(vertical = 4.dp))
                 
-                Text(
-                    text = "پشتیبان‌گیری اختصاصی گروه (بکاپ جزئی)",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = accentColor
-                )
-                
-                Button(
-                    onClick = { onBackupGroup(group) },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE8F5E9), contentColor = Color(0xFF2E7D32)),
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 10.dp),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(TablerIcons.DeviceFloppy, contentDescription = null, tint = Color(0xFF2E7D32))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("تهیه فایل پشتیبان گروه", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-                
-                Divider(modifier = Modifier.padding(vertical = 4.dp))
-                
                 Button(
                     onClick = { showDeleteConfirm = true },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFEBEE)),

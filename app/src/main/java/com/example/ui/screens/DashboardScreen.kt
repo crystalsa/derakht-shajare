@@ -505,63 +505,115 @@ $databaseError
             }
         },
         floatingActionButton = {
-            if (activeTab == "Tree" && !isViewingTree) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    AnimatedVisibility(
-                        visible = fabExpanded,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            ExtendedFloatingActionButton(
-                                text = { Text("+ پوشه جدید", fontWeight = FontWeight.Bold) },
-                                icon = { Icon(TablerIcons.FolderPlus, contentDescription = null) },
-                                onClick = {
-                                    fabExpanded = false
-                                    showAddFolderDialog = true
-                                },
-                                containerColor = Color(0xFFFFF3E0),
-                                contentColor = Color(0xFFE65100)
-                            )
+            val canGoBack = focusPersonId != null || isTreeExpanded || isViewingTree || currentFolderId != null
 
-                            ExtendedFloatingActionButton(
-                                text = { Text("+ گروه فامیلی جدید", fontWeight = FontWeight.Bold) },
-                                icon = { Icon(TablerIcons.UserPlus, contentDescription = null) },
-                                onClick = {
-                                    fabExpanded = false
-                                    showAddGroupDialog = true
-                                },
-                                containerColor = Color(0xFFE8F5E9),
-                                contentColor = Color(0xFF2E7D32)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                // Right side in RTL -> Orange Back Button
+                Box {
+                    if (canGoBack) {
+                        val (backLabel, backIcon, backAction) = when {
+                            focusPersonId != null -> Triple(
+                                "خروج از تمرکز",
+                                Icons.Default.Close,
+                                { viewModel.setFocusPersonId(null) }
+                            )
+                            isTreeExpanded -> Triple(
+                                "بازگشت",
+                                Icons.Default.ArrowBack,
+                                { isTreeExpanded = false }
+                            )
+                            isViewingTree -> Triple(
+                                "بازگشت",
+                                Icons.Default.ArrowBack,
+                                { isViewingTree = false }
+                            )
+                            else -> Triple(
+                                "بازگشت",
+                                Icons.Default.ArrowBack,
+                                {
+                                    val parentId = allFolders.find { it.id == currentFolderId }?.parentId
+                                    viewModel.setCurrentFolderId(parentId)
+                                }
                             )
                         }
-                    }
 
-                    FloatingActionButton(
-                        onClick = { fabExpanded = !fabExpanded },
-                        containerColor = accentColor,
-                        contentColor = Color.White
-                    ) {
-                        Icon(
-                            imageVector = if (fabExpanded) Icons.Default.Close else Icons.Default.Add,
-                            contentDescription = "افزودن پوشه یا گروه فامیلی"
+                        ExtendedFloatingActionButton(
+                            text = { Text(backLabel, fontWeight = FontWeight.Bold) },
+                            icon = { Icon(backIcon, contentDescription = backLabel) },
+                            onClick = { backAction() },
+                            containerColor = Color(0xFFF57C00),
+                            contentColor = Color.White
                         )
                     }
                 }
-            } else {
-                FloatingActionButton(
-                    onClick = onAddPersonTrigger,
-                    containerColor = accentColor,
-                    contentColor = if (currentTheme == "Dark Gold") Color.Black else Color.White,
-                    modifier = Modifier.testTag("add_member_fab")
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "افزودن عضو")
+
+                // Left side in RTL -> Plus Action Button
+                Box {
+                    if (activeTab == "Tree" && !isViewingTree) {
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            AnimatedVisibility(
+                                visible = fabExpanded,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically()
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.End,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    ExtendedFloatingActionButton(
+                                        text = { Text("+ پوشه جدید", fontWeight = FontWeight.Bold) },
+                                        icon = { Icon(TablerIcons.FolderPlus, contentDescription = null) },
+                                        onClick = {
+                                            fabExpanded = false
+                                            showAddFolderDialog = true
+                                        },
+                                        containerColor = Color(0xFFFFF3E0),
+                                        contentColor = Color(0xFFE65100)
+                                    )
+
+                                    ExtendedFloatingActionButton(
+                                        text = { Text("+ گروه فامیلی جدید", fontWeight = FontWeight.Bold) },
+                                        icon = { Icon(TablerIcons.UserPlus, contentDescription = null) },
+                                        onClick = {
+                                            fabExpanded = false
+                                            showAddGroupDialog = true
+                                        },
+                                        containerColor = Color(0xFFE8F5E9),
+                                        contentColor = Color(0xFF2E7D32)
+                                    )
+                                }
+                            }
+
+                            FloatingActionButton(
+                                onClick = { fabExpanded = !fabExpanded },
+                                containerColor = accentColor,
+                                contentColor = Color.White
+                            ) {
+                                Icon(
+                                    imageVector = if (fabExpanded) Icons.Default.Close else Icons.Default.Add,
+                                    contentDescription = "افزودن پوشه یا گروه فامیلی"
+                                )
+                            }
+                        }
+                    } else {
+                        FloatingActionButton(
+                            onClick = onAddPersonTrigger,
+                            containerColor = accentColor,
+                            contentColor = if (currentTheme == "Dark Gold") Color.Black else Color.White,
+                            modifier = Modifier.testTag("add_member_fab")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "افزودن عضو")
+                        }
+                    }
                 }
             }
         },
@@ -651,36 +703,6 @@ $databaseError
                                         color = if (currentFolderId == folder.id && !isViewingTree) accentColor else textColor
                                     )
                                 }
-                            }
-                        }
-                    }
-
-                    // Back to Folders button when viewing a tree
-                    if (isViewingTree) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            onClick = { isViewingTree = false },
-                            color = accentColor.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, accentColor)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    TablerIcons.Folder,
-                                    contentDescription = null,
-                                    tint = accentColor,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    "بازگشت به پوشه‌ها",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = accentColor
-                                )
                             }
                         }
                     }
@@ -871,6 +893,11 @@ $databaseError
                                             moveCopyTargetItem = Pair(subfolder, true)
                                             isCopyOperation = true
                                         },
+                                        onBackup = {
+                                            tempExportFolderId = subfolder.id
+                                            backupFileNameInput = "بکاپ_پوشه_${subfolder.name}"
+                                            showBackupDialog = true
+                                        },
                                         onDelete = {
                                             if (viewModel.isFolderEmpty(subfolder.id)) {
                                                 viewModel.deleteFolder(subfolder)
@@ -903,6 +930,11 @@ $databaseError
                                         onCopy = {
                                             moveCopyTargetItem = Pair(group, false)
                                             isCopyOperation = true
+                                        },
+                                        onBackup = {
+                                            tempExportGroupId = group.id
+                                            backupFileNameInput = "بکاپ_گروه_${group.name}"
+                                            showBackupDialog = true
                                         },
                                         onDelete = { groupToDelete = group }
                                     )
@@ -1384,22 +1416,7 @@ $databaseError
                                 glowPersonId = glowPersonId
                             )
 
-                            // Floating back button overlay if expanded under Bento Grid theme
-                            if (currentTheme == "Bento Grid" && isTreeExpanded) {
-                                FloatingActionButton(
-                                    onClick = { isTreeExpanded = false },
-                                    containerColor = accentColor,
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .padding(16.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "بستن تمام صفحه",
-                                        tint = Color.White
-                                    )
-                                }
-                            }
+
                         }
                     }
                 } else {
@@ -3104,12 +3121,6 @@ $databaseError
             onDelete = { g ->
                 groupToDelete = g
                 groupToEdit = null
-            },
-            onBackupGroup = { g ->
-                tempExportGroupId = g.id
-                backupFileNameInput = "بکاپ_گروه_${g.name}"
-                showBackupDialog = true
-                groupToEdit = null
             }
         )
     }
@@ -3917,6 +3928,7 @@ private fun FolderCard(
     onEdit: () -> Unit,
     onMove: () -> Unit,
     onCopy: () -> Unit,
+    onBackup: () -> Unit,
     onDelete: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -3924,8 +3936,8 @@ private fun FolderCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = BorderStroke(1.5.dp, Color(0xFFFFB74D)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -4006,6 +4018,14 @@ private fun FolderCard(
                                 onCopy()
                             }
                         )
+                        DropdownMenuItem(
+                            text = { Text("پشتیبان‌گیری (بکاپ)") },
+                            leadingIcon = { Icon(TablerIcons.DeviceFloppy, contentDescription = null, tint = Color(0xFFF57C00)) },
+                            onClick = {
+                                menuExpanded = false
+                                onBackup()
+                            }
+                        )
                         HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text("حذف پوشه", color = Color.Red) },
@@ -4059,6 +4079,7 @@ private fun FamilyGroupCard(
     onEdit: () -> Unit,
     onMove: () -> Unit,
     onCopy: () -> Unit,
+    onBackup: () -> Unit,
     onDelete: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -4066,8 +4087,8 @@ private fun FamilyGroupCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = BorderStroke(1.5.dp, accentColor.copy(alpha = 0.5f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -4146,6 +4167,14 @@ private fun FamilyGroupCard(
                             onClick = {
                                 menuExpanded = false
                                 onCopy()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("پشتیبان‌گیری (بکاپ)") },
+                            leadingIcon = { Icon(TablerIcons.DeviceFloppy, contentDescription = null, tint = accentColor) },
+                            onClick = {
+                                menuExpanded = false
+                                onBackup()
                             }
                         )
                         HorizontalDivider()

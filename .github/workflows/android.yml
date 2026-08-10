@@ -29,17 +29,21 @@ jobs:
       with:
         gradle-version: 9.3.1
 
-    - name: Restore or Generate Debug Keystore
+    - name: Restore Debug Keystore
       run: |
-        if [ -f debug.keystore.base64 ]; then
-          base64 -d debug.keystore.base64 > debug.keystore
+        if [ -f debug.keystore ] && [ -s debug.keystore ]; then
+          echo "debug.keystore found in repository."
+        elif [ -f debug.keystore.base64 ]; then
+          echo "Restoring debug.keystore from debug.keystore.base64..."
+          tr -d '\r\n' < debug.keystore.base64 | base64 -d > debug.keystore
         elif [ -f debug.keystore.base64.txt ]; then
-          base64 -d debug.keystore.base64.txt > debug.keystore
+          echo "Restoring debug.keystore from debug.keystore.base64.txt..."
+          tr -d '\r\n' < debug.keystore.base64.txt | base64 -d > debug.keystore
         fi
-        
+
         if [ ! -f debug.keystore ] || [ ! -s debug.keystore ]; then
-          echo "Generating fallback debug.keystore..."
-          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          echo "ERROR: debug.keystore could not be restored! Build failed to prevent signature mismatch."
+          exit 1
         fi
 
     - name: Configure Environment Variables
