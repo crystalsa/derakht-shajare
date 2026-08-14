@@ -368,7 +368,8 @@ $databaseError
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Scaffold(
-        topBar = {
+            floatingActionButtonPosition = FabPosition.Center,
+            topBar = {
             TopAppBar(
                 title = { 
                     Text(
@@ -396,11 +397,14 @@ $databaseError
                             border = BorderStroke(1.5.dp, accentColor.copy(alpha = 0.5f))
                         ) {
                             Text("ابزارها", fontWeight = FontWeight.Bold, modifier = Modifier.padding(12.dp, 6.dp), fontSize = 12.sp, color = accentColor)
-                            DropdownMenuItem(
-                                text = { Text("محاسبه نسبت فامیلی", color = textColor) },
-                                onClick = { showCalculatorDialog = true; showSettingsMenu = false },
-                                leadingIcon = { Icon(TablerIcons.Calculator, contentDescription = null, tint = accentColor) }
-                            )
+                            val hasTreesInCurrentContext = (isViewingTree && selectedGroupId != null) || orderedGroupsList.isNotEmpty()
+                            if (hasTreesInCurrentContext) {
+                                DropdownMenuItem(
+                                    text = { Text("محاسبه نسبت فامیلی دور", color = textColor) },
+                                    onClick = { showCalculatorDialog = true; showSettingsMenu = false },
+                                    leadingIcon = { Icon(TablerIcons.Calculator, contentDescription = null, tint = accentColor) }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("آمار و آنالیز جمعیتی", color = textColor) },
                                 onClick = { showStatsDialog = true; showSettingsMenu = false },
@@ -484,6 +488,7 @@ $databaseError
                     icon = { Icon(Icons.Default.AccountTree, contentDescription = "درخت") },
                     label = { Text("درخت شجره‌نامه") },
                     colors = NavigationBarItemDefaults.colors(
+                        indicatorColor = Color(0xFFFFF0E0),
                         selectedIconColor = accentColor,
                         selectedTextColor = accentColor,
                         unselectedIconColor = textColor.copy(alpha = 0.6f),
@@ -496,6 +501,7 @@ $databaseError
                     icon = { Icon(Icons.Default.People, contentDescription = "لیست اعضا") },
                     label = { Text("لیست اعضا") },
                     colors = NavigationBarItemDefaults.colors(
+                        indicatorColor = Color(0xFFFFF0E0),
                         selectedIconColor = accentColor,
                         selectedTextColor = accentColor,
                         unselectedIconColor = textColor.copy(alpha = 0.6f),
@@ -514,27 +520,23 @@ $databaseError
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom
             ) {
-                // Right side in RTL -> Orange Back Button
+                // Right side in RTL -> Orange Back FloatingActionButton (Icon only)
                 Box {
                     if (canGoBack) {
-                        val (backLabel, backIcon, backAction) = when {
-                            focusPersonId != null -> Triple(
-                                "خروج از تمرکز",
+                        val (backIcon, backAction) = when {
+                            focusPersonId != null -> Pair(
                                 Icons.Default.Close,
                                 { viewModel.setFocusPersonId(null) }
                             )
-                            isTreeExpanded -> Triple(
-                                "بازگشت",
+                            isTreeExpanded -> Pair(
                                 Icons.Default.ArrowBack,
                                 { isTreeExpanded = false }
                             )
-                            isViewingTree -> Triple(
-                                "بازگشت",
+                            isViewingTree -> Pair(
                                 Icons.Default.ArrowBack,
                                 { isViewingTree = false }
                             )
-                            else -> Triple(
-                                "بازگشت",
+                            else -> Pair(
                                 Icons.Default.ArrowBack,
                                 {
                                     val parentId = allFolders.find { it.id == currentFolderId }?.parentId
@@ -543,13 +545,16 @@ $databaseError
                             )
                         }
 
-                        ExtendedFloatingActionButton(
-                            text = { Text(backLabel, fontWeight = FontWeight.Bold) },
-                            icon = { Icon(backIcon, contentDescription = backLabel) },
+                        FloatingActionButton(
                             onClick = { backAction() },
                             containerColor = Color(0xFFF57C00),
                             contentColor = Color.White
-                        )
+                        ) {
+                            Icon(
+                                imageVector = backIcon,
+                                contentDescription = "بازگشت"
+                            )
+                        }
                     }
                 }
 
@@ -735,37 +740,25 @@ $databaseError
                         }
                     }
                 }
-
-                // Relationship highlights panel
+                // Relationship highlights banner (Top of screen)
                 if (highlightP1Id != null && highlightP2Id != null) {
                     val p1 = allPersonsRaw.find { it.id == highlightP1Id }
                     val p2 = allPersonsRaw.find { it.id == highlightP2Id }
                     if (p1 != null && p2 != null) {
-                        Row(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color(0xFFE5C158).copy(alpha = 0.2f))
-                                .padding(8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            val relLabel = RelationshipCalculator.getRelationshipLabel(p1, p2, allPersonsRaw, relationships)
-                            Column {
-                                Text(
-                                    "مسیر هایلایت شده بین:",
-                                    fontSize = 11.sp,
-                                    color = textColor.copy(alpha = 0.7f)
-                                )
-                                Text(
-                                    "${p1.fullName} ➔ ${p2.fullName} (${relLabel})",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = textColor
-                                )
-                            }
-                            IconButton(onClick = { viewModel.clearHighlighting() }) {
-                                Icon(Icons.Default.Clear, contentDescription = "پاک کردن مسیر", tint = textColor)
-                            }
+                            RelationshipHighlightBanner(
+                                p1 = p1,
+                                p2 = p2,
+                                allPersons = allPersonsRaw,
+                                relationships = relationships,
+                                textColor = textColor,
+                                onClear = { viewModel.clearHighlighting() }
+                            )
                         }
                     }
                 }
@@ -1915,6 +1908,22 @@ $databaseError
                     },
                     glowPersonId = glowPersonId
                 )
+
+                if (highlightP1Id != null && highlightP2Id != null) {
+                    val p1 = allPersonsRaw.find { it.id == highlightP1Id }
+                    val p2 = allPersonsRaw.find { it.id == highlightP2Id }
+                    if (p1 != null && p2 != null) {
+                        RelationshipHighlightBanner(
+                            p1 = p1,
+                            p2 = p2,
+                            allPersons = allPersonsRaw,
+                            relationships = relationships,
+                            textColor = textColor,
+                            onClear = { viewModel.clearHighlighting() },
+                            modifier = Modifier.align(Alignment.TopCenter)
+                        )
+                    }
+                }
 
                 // Beautiful floating close button (FAB) at bottom-end
                 FloatingActionButton(
@@ -3210,16 +3219,50 @@ $databaseError
     }
 
     if (showCalculatorDialog) {
+        val availableGroups = remember(isViewingTree, selectedGroupId, orderedGroupsList, allGroups) {
+            if (isViewingTree && selectedGroupId != null) {
+                val current = allGroups.filter { it.id == selectedGroupId }
+                if (current.isNotEmpty()) current else orderedGroupsList
+            } else if (orderedGroupsList.isNotEmpty()) {
+                orderedGroupsList
+            } else {
+                emptyList()
+            }
+        }
+
+        var selectedCalcGroupId by remember(availableGroups, selectedGroupId) {
+            mutableStateOf(
+                if (selectedGroupId != null && availableGroups.any { it.id == selectedGroupId }) {
+                    selectedGroupId
+                } else {
+                    availableGroups.firstOrNull()?.id
+                }
+            )
+        }
+
+        val calcPersons = remember(selectedCalcGroupId, allPersonsRaw, relationships) {
+            if (selectedCalcGroupId != null) {
+                viewModel.getPersonsInGroup(selectedCalcGroupId!!)
+            } else {
+                emptyList()
+            }
+        }
+
         CalculatorDialog(
-            persons = allPersonsRaw,
+            availableGroups = availableGroups,
+            selectedGroupId = selectedCalcGroupId,
+            onGroupChanged = { newGid -> selectedCalcGroupId = newGid },
+            persons = calcPersons,
             relationships = relationships,
             textColor = textColor,
             accentColor = accentColor,
             onDismiss = { showCalculatorDialog = false },
-            onCalculate = { p1, p2 ->
+            onCalculate = { p1, p2, targetGroupId ->
+                viewModel.setSelectedGroupId(targetGroupId)
                 viewModel.setHighlightPerson1(p1.id)
                 viewModel.setHighlightPerson2(p2.id)
                 showCalculatorDialog = false
+                isViewingTree = true
                 activeTab = "Tree"
             }
         )
@@ -3937,13 +3980,13 @@ private fun FolderCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.5.dp, Color(0xFFFFB74D)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBF5)),
+        border = BorderStroke(1.2.dp, Color(0xFFFFB74D)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(10.dp)
+            modifier = Modifier.padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -3952,15 +3995,15 @@ private fun FolderCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .background(Color(0xFFFFF3E0), CircleShape),
+                        .size(36.dp)
+                        .background(Color(0xFFFFF3E0), RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = TablerIcons.Folder,
                         contentDescription = null,
-                        tint = Color(0xFFF57C00),
-                        modifier = Modifier.size(18.dp)
+                        tint = Color(0xFFE65100),
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -3973,7 +4016,7 @@ private fun FolderCard(
                             imageVector = TablerIcons.DotsVertical,
                             contentDescription = "گزینه‌های پوشه",
                             tint = Color.Gray,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
@@ -3988,7 +4031,7 @@ private fun FolderCard(
                     ) {
                         DropdownMenuItem(
                             text = { Text("ورود به پوشه") },
-                            leadingIcon = { Icon(TablerIcons.Folder, contentDescription = null) },
+                            leadingIcon = { Icon(TablerIcons.Folder, contentDescription = null, tint = Color(0xFFE65100)) },
                             onClick = {
                                 menuExpanded = false
                                 onClick()
@@ -4039,7 +4082,7 @@ private fun FolderCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = folder.name,
@@ -4050,21 +4093,55 @@ private fun FolderCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            val subtitle = if (subFolderCount == 0 && groupCount == 0) {
-                "خالی"
-            } else {
-                "${subFolderCount.toString().toFarsiNumbers()} زیرپوشه ، ${groupCount.toString().toFarsiNumbers()} گروه"
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (subFolderCount == 0 && groupCount == 0) {
+                    Surface(
+                        color = Color(0xFFEEEEEE),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "خالی",
+                            fontSize = 10.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                } else {
+                    if (subFolderCount > 0) {
+                        Surface(
+                            color = Color(0xFFFFF3E0),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "${subFolderCount.toString().toFarsiNumbers()} پوشه",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFE65100),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    if (groupCount > 0) {
+                        Surface(
+                            color = Color(0xFFE8F5E9),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "${groupCount.toString().toFarsiNumbers()} گروه",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF2E7D32),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
             }
-
-            Text(
-                text = subtitle,
-                fontSize = 10.sp,
-                color = Color.Gray,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }
@@ -4088,13 +4165,13 @@ private fun FamilyGroupCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.5.dp, accentColor.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAF9)),
+        border = BorderStroke(1.2.dp, accentColor.copy(alpha = 0.5f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(10.dp)
+            modifier = Modifier.padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -4103,15 +4180,15 @@ private fun FamilyGroupCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .background(accentColor.copy(alpha = 0.15f), CircleShape),
+                        .size(36.dp)
+                        .background(accentColor.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Groups,
                         contentDescription = null,
                         tint = accentColor,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -4124,7 +4201,7 @@ private fun FamilyGroupCard(
                             imageVector = TablerIcons.DotsVertical,
                             contentDescription = "گزینه‌های گروه فامیلی",
                             tint = Color.Gray,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
@@ -4190,7 +4267,7 @@ private fun FamilyGroupCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = group.name,
@@ -4201,15 +4278,93 @@ private fun FamilyGroupCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            Text(
-                text = "${memberCount.toString().toFarsiNumbers()} عضو",
-                fontSize = 10.sp,
-                color = Color.Gray,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Surface(
+                color = accentColor.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(6.dp)
+            ) {
+                Text(
+                    text = "${memberCount.toString().toFarsiNumbers()} عضو",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accentColor,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RelationshipHighlightBanner(
+    p1: Person,
+    p2: Person,
+    allPersons: List<Person>,
+    relationships: List<Relationship>,
+    textColor: Color,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val relLabel = remember(p1, p2, allPersons, relationships) {
+        RelationshipCalculator.getRelationshipLabel(p1, p2, allPersons, relationships)
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth(0.92f)
+            .padding(top = 10.dp, bottom = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        border = BorderStroke(1.dp, Color(0xFFFFB74D).copy(alpha = 0.6f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AltRoute,
+                        contentDescription = null,
+                        tint = Color(0xFFE65100),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "نسبت فامیلی بین ${p1.firstName} و ${p2.firstName}:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE65100)
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = relLabel.toFarsiNumbers(),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2E7D32)
+                )
+            }
+            IconButton(
+                onClick = onClear,
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(Color(0xFFFFE0B2), CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Clear,
+                    contentDescription = "پاک کردن مسیر",
+                    tint = Color(0xFFE65100),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }

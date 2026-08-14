@@ -11,6 +11,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import compose.icons.TablerIcons
 import compose.icons.tablericons.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -59,22 +61,22 @@ fun FamilyMemberNodeCard(
 ) {
     val isGlow = person.id == glowPersonId
     val borderStroke = if (isHighlighted) {
-        BorderStroke(3.dp, Brush.linearGradient(listOf(Color(0xFFF57C00), Color.White, Color(0xFFF57C00))))
+        BorderStroke(3.dp, Brush.linearGradient(listOf(Color(0xFFE66800), Color.White, Color(0xFFE66800))))
     } else if (isGlow) {
         BorderStroke(3.2.dp, accentColor)
     } else if (isShadow) {
-        BorderStroke(1.5.dp, Color.Gray.copy(alpha = 0.5f))
+        BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     } else if (person.isDeceased) {
-        BorderStroke(1.2.dp, Color.Gray.copy(alpha = 0.5f))
+        BorderStroke(1.2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     } else {
-        BorderStroke(1.5.dp, accentColor.copy(alpha = 0.5f))
+        BorderStroke(1.5.dp, accentColor.copy(alpha = 0.6f))
     }
 
     val cardModifier = Modifier
         .width(160.dp)
         .let { modifier ->
             if (isGlow) {
-                modifier.shadow(elevation = 16.dp, shape = RoundedCornerShape(16.dp))
+                modifier.shadow(elevation = 16.dp, shape = RoundedCornerShape(18.dp))
             } else {
                 modifier
             }
@@ -87,23 +89,26 @@ fun FamilyMemberNodeCard(
         }
         .testTag("member_node_${person.id}")
 
+    // Solid opaque background so connecting tree lines drawn behind the card do not bleed through
+    val defaultBg = cardBgColor
+
     Card(
         modifier = cardModifier,
         colors = CardDefaults.cardColors(
-            containerColor = if (isShadow) Color(0xFFF5F5F5) else Color.White
+            containerColor = defaultBg
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isShadow) 1.dp else 5.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isShadow) 1.dp else 4.dp),
         border = borderStroke,
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(18.dp)
     ) {
-        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).let { 
-            if (isShadow) it.alpha(0.65f) else it 
+        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).let { 
+            if (isShadow) it.alpha(0.75f) else it 
         }) {
             if (isShadow) {
                 Icon(
                     imageVector = TablerIcons.Link,
                     contentDescription = "Shadow Link",
-                    tint = Color.Gray,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(8.dp)
@@ -129,7 +134,7 @@ fun FamilyMemberNodeCard(
 
             if (spouseHeartColor != null) {
                 Icon(
-                    imageVector = TablerIcons.Heart,
+                    imageVector = Icons.Default.Favorite,
                     contentDescription = "همسر",
                     tint = spouseHeartColor,
                     modifier = Modifier
@@ -164,7 +169,7 @@ fun FamilyMemberNodeCard(
                 
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
+                        .size(70.dp)
                         .clip(CircleShape)
                         .background(
                             if (person.gender == "Male") Color(0xFFE3F2FD) else Color(0xFFFCE4EC)
@@ -182,27 +187,27 @@ fun FamilyMemberNodeCard(
                         )
                     } else {
                         Icon(
-                            if (person.gender == "Male") TablerIcons.User else TablerIcons.User,
+                            imageVector = TablerIcons.User,
                             contentDescription = null,
                             tint = if (person.gender == "Male") Color(0xFF1E88E5) else Color(0xFFD81B60),
-                            modifier = Modifier.size(52.dp)
+                            modifier = Modifier.size(48.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
                     text = person.fullName,
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
-                    color = Color(0xFF112E21),
+                    color = textColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
                     text = person.occupation ?: "-",
@@ -214,7 +219,7 @@ fun FamilyMemberNodeCard(
                     fontWeight = FontWeight.Medium
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 if (person.birthDate != null || person.isDeceased) {
                     val ageDisplay = formatLifeYearsOnlyLTR(person.birthDate, person.deathDate, person.isDeceased)
@@ -222,7 +227,7 @@ fun FamilyMemberNodeCard(
                     Text(
                         text = ageDisplay.toFarsiNumbers(),
                         fontSize = 10.sp,
-                        color = Color(0xFF455A64),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold
                     )
                 }

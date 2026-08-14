@@ -188,8 +188,8 @@ fun InteractiveFamilyTree(
             val p1 = persons.find { it.id == highlightP1Id }
             val p2 = persons.find { it.id == highlightP2Id }
             if (p1 != null && p2 != null) {
-                val path = RelationshipCalculator.findShortestPath(p1, p2, persons, relationships)
-                path?.map { it.first.id }?.toSet() ?: emptySet()
+                val paths = RelationshipCalculator.findAllPaths(p1, p2, persons, relationships)
+                paths.flatMap { path -> path.map { it.first.id } }.toSet()
             } else {
                 emptySet()
             }

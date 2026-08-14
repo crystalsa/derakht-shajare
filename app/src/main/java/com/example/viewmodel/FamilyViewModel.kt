@@ -235,6 +235,48 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         result
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    fun getPersonsInGroup(groupId: Long): List<Person> {
+        val persons = _allPersons.value
+        val relationships = _allRelationships.value
+        val visibleIds = mutableSetOf<Long>()
+        val baseGroupPersons = persons.filter { it.groupId == groupId }
+        val queue: Queue<Long> = LinkedList()
+        baseGroupPersons.forEach { 
+            visibleIds.add(it.id)
+            queue.add(it.id)
+        }
+
+        val spousesMap = mutableMapOf<Long, MutableSet<Long>>()
+        val childrenMap = mutableMapOf<Long, MutableSet<Long>>()
+
+        relationships.forEach { rel ->
+            when (rel.type) {
+                "Spouse", "Divorced", "SecondSpouse", "SecondSpouse_Divorced" -> {
+                    spousesMap.getOrPut(rel.personId1) { mutableSetOf() }.add(rel.personId2)
+                    spousesMap.getOrPut(rel.personId2) { mutableSetOf() }.add(rel.personId1)
+                }
+                "Parent-Child", "Adoptive-Parent-Child" -> {
+                    childrenMap.getOrPut(rel.personId1) { mutableSetOf() }.add(rel.personId2)
+                }
+            }
+        }
+
+        while (queue.isNotEmpty()) {
+            val curr = queue.poll() ?: continue
+            spousesMap[curr]?.forEach { spouseId ->
+                if (visibleIds.add(spouseId)) {
+                    queue.add(spouseId)
+                }
+            }
+            childrenMap[curr]?.forEach { childId ->
+                if (visibleIds.add(childId)) {
+                    queue.add(childId)
+                }
+            }
+        }
+        return persons.filter { visibleIds.contains(it.id) }
+    }
+
     // Database Actions
     fun seedSampleData(targetFolderId: Long? = currentFolderId.value) {
         viewModelScope.launch {
@@ -1454,7 +1496,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                         val gObj = groupsArr.optJSONObject(i) ?: continue
                         val oldId = gObj.optLong("id", -1L)
                         val name = gObj.optString("name", "گروه فامیلی")
-                        val description = if (gObj.isNull("description") || !gObj.has("description")) null else gObj.optString("description", null)
+                        val description = if (gObj.isNull("description") || !gObj.has("description")) null else gObj.optString("description")
                         val displayOrder = gObj.optInt("displayOrder", 0)
                         val oldFolderId = if (gObj.has("folderId") && !gObj.isNull("folderId")) gObj.optLong("folderId", -1L).takeIf { it != -1L } else null
                         val newFolderId = if (oldFolderId != null) (oldToNewFolderIdMap[oldFolderId] ?: targetFolderId) else targetFolderId
@@ -1489,14 +1531,14 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     val firstName = pObj.optString("firstName", "").ifBlank { pObj.optString("name", "عضو") }
                     val lastName = pObj.optString("lastName", "")
                     val gender = pObj.optString("gender", "Male")
-                    val birthDate = if (pObj.isNull("birthDate") || !pObj.has("birthDate")) null else pObj.optString("birthDate", null)
-                    val birthPlace = if (pObj.isNull("birthPlace") || !pObj.has("birthPlace")) null else pObj.optString("birthPlace", null)
-                    val deathDate = if (pObj.isNull("deathDate") || !pObj.has("deathDate")) null else pObj.optString("deathDate", null)
-                    val deathPlace = if (pObj.isNull("deathPlace") || !pObj.has("deathPlace")) null else pObj.optString("deathPlace", null)
+                    val birthDate = if (pObj.isNull("birthDate") || !pObj.has("birthDate")) null else pObj.optString("birthDate")
+                    val birthPlace = if (pObj.isNull("birthPlace") || !pObj.has("birthPlace")) null else pObj.optString("birthPlace")
+                    val deathDate = if (pObj.isNull("deathDate") || !pObj.has("deathDate")) null else pObj.optString("deathDate")
+                    val deathPlace = if (pObj.isNull("deathPlace") || !pObj.has("deathPlace")) null else pObj.optString("deathPlace")
                     val isDeceased = pObj.optBoolean("isDeceased", false)
-                    val occupation = if (pObj.isNull("occupation") || !pObj.has("occupation")) null else pObj.optString("occupation", null)
-                    val biography = if (pObj.isNull("biography") || !pObj.has("biography")) null else pObj.optString("biography", null)
-                    val originalPhotoUri = if (pObj.isNull("photoUri") || !pObj.has("photoUri")) null else pObj.optString("photoUri", null)
+                    val occupation = if (pObj.isNull("occupation") || !pObj.has("occupation")) null else pObj.optString("occupation")
+                    val biography = if (pObj.isNull("biography") || !pObj.has("biography")) null else pObj.optString("biography")
+                    val originalPhotoUri = if (pObj.isNull("photoUri") || !pObj.has("photoUri")) null else pObj.optString("photoUri")
                     val generation = pObj.optInt("generation", 1)
                     
                     val oldGroupId = if (pObj.isNull("groupId") || !pObj.has("groupId")) null else pObj.optLong("groupId", -1L).takeIf { it != -1L }
@@ -1795,14 +1837,14 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                     val firstName = pObj.optString("firstName", "").ifBlank { pObj.optString("name", "عضو") }
                     val lastName = pObj.optString("lastName", "")
                     val gender = pObj.optString("gender", "Male")
-                    val birthDate = if (pObj.isNull("birthDate") || !pObj.has("birthDate")) null else pObj.optString("birthDate", null)
-                    val birthPlace = if (pObj.isNull("birthPlace") || !pObj.has("birthPlace")) null else pObj.optString("birthPlace", null)
-                    val deathDate = if (pObj.isNull("deathDate") || !pObj.has("deathDate")) null else pObj.optString("deathDate", null)
-                    val deathPlace = if (pObj.isNull("deathPlace") || !pObj.has("deathPlace")) null else pObj.optString("deathPlace", null)
+                    val birthDate = if (pObj.isNull("birthDate") || !pObj.has("birthDate")) null else pObj.optString("birthDate")
+                    val birthPlace = if (pObj.isNull("birthPlace") || !pObj.has("birthPlace")) null else pObj.optString("birthPlace")
+                    val deathDate = if (pObj.isNull("deathDate") || !pObj.has("deathDate")) null else pObj.optString("deathDate")
+                    val deathPlace = if (pObj.isNull("deathPlace") || !pObj.has("deathPlace")) null else pObj.optString("deathPlace")
                     val isDeceased = pObj.optBoolean("isDeceased", false)
-                    val occupation = if (pObj.isNull("occupation") || !pObj.has("occupation")) null else pObj.optString("occupation", null)
-                    val biography = if (pObj.isNull("biography") || !pObj.has("biography")) null else pObj.optString("biography", null)
-                    val originalPhotoUri = if (pObj.isNull("photoUri") || !pObj.has("photoUri")) null else pObj.optString("photoUri", null)
+                    val occupation = if (pObj.isNull("occupation") || !pObj.has("occupation")) null else pObj.optString("occupation")
+                    val biography = if (pObj.isNull("biography") || !pObj.has("biography")) null else pObj.optString("biography")
+                    val originalPhotoUri = if (pObj.isNull("photoUri") || !pObj.has("photoUri")) null else pObj.optString("photoUri")
                     val generation = pObj.optInt("generation", 1)
                     
                     // Normalize generation

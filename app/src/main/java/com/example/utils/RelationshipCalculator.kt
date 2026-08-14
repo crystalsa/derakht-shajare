@@ -39,7 +39,6 @@ object RelationshipCalculator {
 
     /**
      * Finds the shortest path between Person A and Person B in the family graph.
-     * Returns a list of Pairs of Person and the incoming directed relationship from the previous node.
      */
     fun findShortestPath(
         personA: Person,
@@ -47,64 +46,109 @@ object RelationshipCalculator {
         allPersons: List<Person>,
         allRelationships: List<Relationship>
     ): List<Pair<Person, String>>? {
+        val paths = findAllPaths(personA, personB, allPersons, allRelationships, maxDepth = 6, maxPaths = 1)
+        return paths.firstOrNull()
+    }
+
+    /**
+     * Finds all simple paths between Person A and Person B in the family graph up to maxDepth.
+     */
+    fun findAllPaths(
+        personA: Person,
+        personB: Person,
+        allPersons: List<Person>,
+        allRelationships: List<Relationship>,
+        maxDepth: Int = 6,
+        maxPaths: Int = 10
+    ): List<List<Pair<Person, String>>> {
         if (personA.id == personB.id) return emptyList()
 
         val personMap = allPersons.associateBy { it.id }
-        
-        // Build adjacency list: PersonId -> List of NeighborIds
-        val adjList = mutableMapOf<Long, MutableList<Long>>()
+
+        // Build adjacency map: PersonId -> List of Pair<NeighborPersonId, DirectedRelType>
+        val adjList = mutableMapOf<Long, MutableList<Pair<Long, String>>>()
         for (rel in allRelationships) {
-            adjList.getOrPut(rel.personId1) { mutableListOf() }.add(rel.personId2)
-            adjList.getOrPut(rel.personId2) { mutableListOf() }.add(rel.personId1)
-        }
-
-        val queue: Queue<PathNode> = LinkedList()
-        val visited = mutableSetOf<Long>()
-
-        queue.add(PathNode(personA))
-        visited.add(personA.id)
-
-        var targetNode: PathNode? = null
-
-        while (queue.isNotEmpty()) {
-            val curr = queue.poll() ?: continue
-            if (curr.person.id == personB.id) {
-                targetNode = curr
-                break
-            }
-
-            val neighbors = adjList[curr.person.id] ?: emptyList()
-            for (neighborId in neighbors) {
-                if (!visited.contains(neighborId)) {
-                    val neighborPerson = personMap[neighborId]
-                    if (neighborPerson != null) {
-                        val dirRel = getDirectedRelation(curr.person, neighborPerson, allRelationships)
-                        if (dirRel != null) {
-                            visited.add(neighborId)
-                            queue.add(PathNode(neighborPerson, dirRel, curr))
-                        }
-                    }
+            val p1 = personMap[rel.personId1]
+            val p2 = personMap[rel.personId2]
+            if (p1 != null && p2 != null) {
+                val dir1To2 = getDirectedRelation(p1, p2, allRelationships)
+                if (dir1To2 != null) {
+                    adjList.getOrPut(p1.id) { mutableListOf() }.add(Pair(p2.id, dir1To2))
+                }
+                val dir2To1 = getDirectedRelation(p2, p1, allRelationships)
+                if (dir2To1 != null) {
+                    adjList.getOrPut(p2.id) { mutableListOf() }.add(Pair(p1.id, dir2To1))
                 }
             }
         }
 
-        if (targetNode == null) return null
+        val resultPaths = mutableListOf<List<Pair<Person, String>>>()
 
-        // Reconstruct path
-        val path = mutableListOf<Pair<Person, String>>()
-        var node: PathNode? = targetNode
-        while (node != null) {
-            val relName = node.incomingRelType ?: "Start"
-            path.add(0, Pair(node.person, relName))
-            node = node.parentNode
+        fun dfs(
+            currentPersonId: Long,
+            currentPath: MutableList<Pair<Person, String>>,
+            visitedIds: MutableSet<Long>,
+            depth: Int
+        ) {
+            if (resultPaths.size >= maxPaths || depth > maxDepth) return
+
+            if (currentPersonId == personB.id) {
+                resultPaths.add(ArrayList(currentPath))
+                return
+            }
+
+            val neighbors = adjList[currentPersonId] ?: return
+            for ((neighborId, dirRel) in neighbors) {
+                if (!visitedIds.contains(neighborId)) {
+                    val neighborPerson = personMap[neighborId] ?: continue
+                    visitedIds.add(neighborId)
+                    currentPath.add(Pair(neighborPerson, dirRel))
+
+                    dfs(neighborId, currentPath, visitedIds, depth + 1)
+
+                    currentPath.removeAt(currentPath.size - 1)
+                    visitedIds.remove(neighborId)
+                }
+            }
         }
-        return path
+
+        val startVisited = mutableSetOf(personA.id)
+        val startPath = mutableListOf(Pair(personA, "Start"))
+        dfs(personA.id, startPath, startVisited, 0)
+
+        return resultPaths.sortedBy { it.size }
+    }
+
+    private val STANDARD_TERMS = setOf(
+        "پدر", "مادر", "پسر", "دختر",
+        "شوهر", "زن", "همسر", "همسر سابق",
+        "برادر", "خواهر",
+        "پدر بزرگ", "مادر بزرگ", "پدربزرگ", "مادربزرگ", "نوه",
+        "عمو", "عمه", "دایی", "خاله",
+        "برادرزاده", "خواهرزاده",
+        "پسرعمو", "دخترعمو", "پسرعمه", "دخترعمه",
+        "پسردایی", "دختردایی", "پسرخاله", "دخترخاله",
+        "پدر همسر", "مادر همسر", "داماد", "عروس",
+        "برادر همسر", "خواهر همسر", "زن برادر", "شوهر خواهر", "باجناق", "جاری",
+        "ناپدری", "نامادری", "پدرخوانده", "مادرخوانده", "فرزندخوانده",
+        "جد بزرگ", "جده بزرگ", "نبیره", "ندیده",
+        "عموی همسر", "عمه همسر", "دایی همسر", "خاله همسر",
+        "پدربزرگ همسر", "مادربزرگ همسر"
+    )
+
+    private fun isStandardTerm(term: String): Boolean {
+        if (STANDARD_TERMS.contains(term)) return true
+        if (term.endsWith(" همسر")) {
+            val base = term.removeSuffix(" همسر")
+            if (STANDARD_TERMS.contains(base)) return true
+        }
+        return false
     }
 
     /**
      * Decodes the list of directed steps from B to A into a clean, natural Persian relationship label.
      */
-    private fun getRelationLabelFromSteps(steps: List<String>, personA: Person, personB: Person): String {
+    fun getRelationLabelFromSteps(steps: List<String>, personA: Person, personB: Person): String {
         val size = steps.size
 
         // Direct relationships
@@ -149,6 +193,11 @@ object RelationshipCalculator {
                 return if (s2 == "FATHER") "پدر همسرِ" else "مادر همسرِ"
             }
 
+            // Child's spouse (Daughter-in-law / Son-in-law)
+            if ((s1 == "SON" || s1 == "DAUGHTER") && s2 == "SPOUSE") {
+                return if (personA.gender == "Male") "دامادِ" else "عروسِ"
+            }
+
             // Spouse child
             if (s1 == "SPOUSE" && (s2 == "SON" || s2 == "DAUGHTER")) {
                 return if (s2 == "SON") "پسرِ همسرِ" else "دخترِ همسرِ"
@@ -191,6 +240,16 @@ object RelationshipCalculator {
                     "خواهرزاده‌ی"
                 }
             }
+
+            // Sibling's spouse (زن داداش / شوهر خواهر)
+            if ((s1 == "FATHER" || s1 == "MOTHER") && (s2 == "SON" || s2 == "DAUGHTER") && s3 == "SPOUSE") {
+                return if (s2 == "SON") "زن برادرِ" else "شوهر خواهرِ"
+            }
+
+            // Spouse Sibling
+            if (s1 == "SPOUSE" && (s2 == "FATHER" || s2 == "MOTHER") && (s3 == "SON" || s3 == "DAUGHTER")) {
+                return if (s3 == "SON") "برادر همسرِ" else "خواهر همسرِ"
+            }
         }
 
         // Four-step relationships
@@ -222,30 +281,102 @@ object RelationshipCalculator {
                     else -> "خویشاوندِ"
                 }
             }
-        }
 
-        // Fallback for complex/long paths: Chain backwards step by step
-        val stepDescs = steps.map { step ->
-            when (step) {
-                "FATHER" -> "پدرِ"
-                "MOTHER" -> "مادرِ"
-                "SON" -> "پسرِ"
-                "DAUGHTER" -> "دخترِ"
-                "SPOUSE" -> "همسرِ"
-                "EX_SPOUSE" -> "همسر سابقِ"
-                "ADOPTIVE_FATHER" -> "پدرخوانده‌ی"
-                "ADOPTIVE_MOTHER" -> "مادرخوانده‌ی"
-                "ADOPTIVE_SON" -> "فرزندخوانده‌ی"
-                "ADOPTIVE_DAUGHTER" -> "فرزندخوانده‌ی"
-                else -> "خویشاوندِ"
+            // Aunt/Uncle spouse (زن عمو, شوهر عمه, زن دایی, شوهر خاله)
+            if ((s1 == "FATHER" || s1 == "MOTHER") && (s2 == "FATHER" || s2 == "MOTHER") && (s3 == "SON" || s3 == "DAUGHTER") && s4 == "SPOUSE") {
+                return if (s1 == "FATHER") {
+                    if (s3 == "SON") "زن عمویِ" else "شوهر عمه‌ی"
+                } else {
+                    if (s3 == "SON") "زن داییِ" else "شوهر خاله‌ی"
+                }
+            }
+
+            // Bajenagh / Jari (B -> Spouse -> Parent -> Sibling -> Spouse)
+            if (s1 == "SPOUSE" && (s2 == "FATHER" || s2 == "MOTHER") && (s3 == "SON" || s3 == "DAUGHTER") && s4 == "SPOUSE") {
+                if (personB.gender == "Male" && personA.gender == "Male") return "باجناقِ"
+                if (personB.gender == "Female" && personA.gender == "Female") return "جاریِ"
             }
         }
-        return stepDescs.reversed().joinToString(" ")
+
+        return "خویشاوندِ"
+    }
+
+    private fun cleanTerm(raw: String): String {
+        var term = raw.trim()
+        if (term.endsWith("ِ")) {
+            term = term.substring(0, term.length - 1).trim()
+        }
+        if (term.endsWith("‌ی")) {
+            term = term.substring(0, term.length - 2).trim()
+            if (!term.endsWith("ه") && !term.endsWith("ة")) {
+                term += "ه"
+            }
+        } else if (term.endsWith("ی") && !term.endsWith("دایی") && !term.endsWith("عمو") && !term.endsWith("عمه") && !term.endsWith("خاله")) {
+            term = term.substring(0, term.length - 1).trim()
+        }
+        if (term == "مادربزرگ") term = "مادر بزرگ"
+        if (term == "پدربزرگ") term = "پدر بزرگ"
+        return term
+    }
+
+    private fun addEzafeToTerm(term: String): String {
+        if (term == "خویشاوند") return "خویشاوندِ"
+        if (term.endsWith("ه") || term.endsWith("ة")) return "${term}‌ی"
+        if (term.endsWith("ا") || term.endsWith("و") || term.endsWith("ی")) return "${term}یِ"
+        return "${term}ِ"
+    }
+
+    /**
+     * Finds all unique standard relationship terms between Person A and Person B.
+     */
+    fun getAllRelationshipTerms(
+        personA: Person,
+        personB: Person,
+        allPersons: List<Person>,
+        allRelationships: List<Relationship>
+    ): List<String> {
+        if (personA.id == personB.id) return listOf("خودِ شخص")
+
+        val pathsFromBToA = findAllPaths(personB, personA, allPersons, allRelationships, maxDepth = 5, maxPaths = 10)
+        if (pathsFromBToA.isEmpty()) return emptyList()
+
+        val standardTerms = LinkedHashSet<String>()
+        for (path in pathsFromBToA) {
+            val steps = path.drop(1).map { it.second }
+            val rawLabel = getRelationLabelFromSteps(steps, personA, personB)
+            val cleaned = cleanTerm(rawLabel)
+            if (cleaned.isNotBlank() && isStandardTerm(cleaned)) {
+                standardTerms.add(cleaned)
+            }
+        }
+
+        if (standardTerms.isNotEmpty()) {
+            return standardTerms.toList()
+        }
+
+        return listOf("خویشاوند")
+    }
+
+    /**
+     * Returns individual sentences for each distinct relationship between Person A and Person B.
+     */
+    fun getAllRelationshipSentences(
+        personA: Person,
+        personB: Person,
+        allPersons: List<Person>,
+        allRelationships: List<Relationship>
+    ): List<String> {
+        val terms = getAllRelationshipTerms(personA, personB, allPersons, allRelationships)
+        if (terms.isEmpty()) return listOf("${personA.firstName} هیچ نسبت فامیلی مستقیمی با ${personB.firstName} ندارد")
+        return terms.map { term ->
+            val termWithEzafe = addEzafeToTerm(term)
+            "${personA.firstName} $termWithEzafe ${personB.firstName} هست"
+        }
     }
 
     /**
      * Computes a friendly Persian relationship label from Person A to Person B.
-     * Formats output as: "زهرا مادربزرگ مریم هست" or "علی پسرِ زهرا هست".
+     * If multiple relationships exist, combines them seamlessly (e.g., "علی همزمان شوهر و پسرعمویِ مریم هست").
      */
     fun getRelationshipLabel(
         personA: Person,
@@ -255,40 +386,18 @@ object RelationshipCalculator {
     ): String {
         if (personA.id == personB.id) return "خودِ شخص هست"
 
-        // Find the shortest path from B to A.
-        // The steps along the path from B to A directly represent how to reach A from B,
-        // which tells us exactly what relation A is to B.
-        val pathFromBToA = findShortestPath(personB, personA, allPersons, allRelationships)
-            ?: return "هیچ نسبت فامیلی مستقیمی تعریف نشده است"
+        val terms = getAllRelationshipTerms(personA, personB, allPersons, allRelationships)
+        if (terms.isEmpty()) return "هیچ نسبت فامیلی مستقیمی تعریف نشده است"
 
-        if (pathFromBToA.isEmpty()) return "خودِ شخص هست"
+        if (terms.size == 1) {
+            val termWithEzafe = addEzafeToTerm(terms[0])
+            return "${personA.firstName} $termWithEzafe ${personB.firstName} هست"
+        }
 
-        val steps = pathFromBToA.drop(1).map { it.second }
-        val relationLabel = getRelationLabelFromSteps(steps, personA, personB)
+        val firstTerms = terms.dropLast(1).joinToString("، ")
+        val lastTermWithEzafe = addEzafeToTerm(terms.last())
 
-        // Make sure we space things nicely and don't duplicate ezafe (ِ) or append it awkwardly.
-        var relationshipTerm = relationLabel.trim()
-        
-        // Remove trailing Persian ezafe and relative markers for a natural spoken sentence format
-        if (relationshipTerm.endsWith("ِ")) {
-            relationshipTerm = relationshipTerm.substring(0, relationshipTerm.length - 1)
-        }
-        if (relationshipTerm.endsWith("‌ی")) {
-            val prefix = relationshipTerm.substring(0, relationshipTerm.length - 2)
-            relationshipTerm = if (prefix.endsWith("ه") || prefix.endsWith("ة")) prefix else prefix + "ه"
-        } else if (relationshipTerm.endsWith("ی") && !relationshipTerm.endsWith("دایی")) {
-            relationshipTerm = relationshipTerm.substring(0, relationshipTerm.length - 1)
-        }
-        
-        // Handle specific replacements as requested
-        if (relationshipTerm == "مادربزرگ") {
-            relationshipTerm = "مادر بزرگ"
-        } else if (relationshipTerm == "پدربزرگ") {
-            relationshipTerm = "پدر بزرگ"
-        }
-        
-        // Return a beautiful, descriptive full sentence
-        return "${personA.firstName} $relationshipTerm ${personB.firstName} هست"
+        return "${personA.firstName} همزمان $firstTerms و $lastTermWithEzafe ${personB.firstName} هست"
     }
 
     /**
@@ -300,39 +409,9 @@ object RelationshipCalculator {
         allPersons: List<Person>,
         allRelationships: List<Relationship>
     ): String? {
-        val spouseTypes = listOf("Spouse", "Divorced", "SecondSpouse", "SecondSpouse_Divorced")
-        val parentTypes = listOf("Parent-Child", "Adoptive-Parent-Child")
-        
-        val childrenOfA = allRelationships.filter { 
-            it.personId1 == spouseA.id && it.type in parentTypes 
-        }.map { it.personId2 }.toSet()
-        val childrenOfB = allRelationships.filter { 
-            it.personId1 == spouseB.id && it.type in parentTypes 
-        }.map { it.personId2 }.toSet()
-        val commonChildren = childrenOfA.intersect(childrenOfB)
-
-        val filteredRelationships = allRelationships.filterNot { 
-            ((it.personId1 == spouseA.id && it.personId2 == spouseB.id && it.type in spouseTypes) ||
-            (it.personId1 == spouseB.id && it.personId2 == spouseA.id && it.type in spouseTypes))
-        }.filterNot {
-            (it.personId1 == spouseA.id && it.personId2 in commonChildren && it.type in parentTypes) ||
-            (it.personId1 == spouseB.id && it.personId2 in commonChildren && it.type in parentTypes)
-        }
-        
-        val path = findShortestPath(spouseB, spouseA, allPersons, filteredRelationships)
-        if (path == null || path.isEmpty()) return null
-        
-        val steps = path.drop(1).map { it.second }
-        var relationLabel = getRelationLabelFromSteps(steps, spouseA, spouseB).trim()
-        if (relationLabel.endsWith("ِ")) {
-            relationLabel = relationLabel.substring(0, relationLabel.length - 1)
-        }
-        if (relationLabel.endsWith("‌ی")) {
-            relationLabel = relationLabel.substring(0, relationLabel.length - 2)
-        } else if (relationLabel.endsWith("ی") && !relationLabel.endsWith("دایی")) {
-            relationLabel = relationLabel.substring(0, relationLabel.length - 1)
-        }
-        
-        return if (relationLabel != "خویشاوند") relationLabel else null
+        val terms = getAllRelationshipTerms(spouseA, spouseB, allPersons, allRelationships)
+        val bloodTerm = terms.find { it != "شوهر" && it != "زن" && it != "همسر" && it != "همسر سابق" && it != "خودِ شخص" }
+        return bloodTerm
     }
 }
+
