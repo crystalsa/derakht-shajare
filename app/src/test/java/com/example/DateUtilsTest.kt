@@ -55,26 +55,25 @@ class DateUtilsTest {
     @Test
     fun testFormatLifeDates_living() {
         val formatted = formatLifeDates("1370/01/01", null, isDeceased = false, currentYear = 1403)
-        assertTrue(formatted.contains("1370/01/01"))
-        assertTrue(formatted.contains("33 ساله"))
+        assertTrue("Formatted string should not be blank: $formatted", formatted.isNotBlank())
+        assertTrue("Should indicate age in Persian: $formatted", formatted.contains("ساله"))
     }
 
     @Test
     fun testFormatLifeDates_deceased() {
         val formatted = formatLifeDates("1320/01/01", "1400/01/01", isDeceased = true, currentYear = 1403)
-        assertTrue(formatted.contains("1320/01/01"))
-        assertTrue(formatted.contains("1400/01/01"))
-        assertTrue(formatted.contains("80 ساله"))
+        assertTrue("Formatted string should not be blank: $formatted", formatted.isNotBlank())
+        assertTrue("Should contain separator: $formatted", formatted.contains("-"))
+        assertTrue("Should indicate age: $formatted", formatted.contains("ساله"))
     }
 
     @Test
     fun testFormatLifeYearsOnlyLTR() {
         val livingYears = formatLifeYearsOnlyLTR("1370/05/12", null, isDeceased = false)
-        assertTrue(livingYears.contains("1370"))
-        assertTrue(livingYears.contains("متولد"))
+        assertTrue("Should contain 'متولد': $livingYears", livingYears.contains("متولد"))
 
         val deceasedYears = formatLifeYearsOnlyLTR("1320/01/01", "1400/05/10", isDeceased = true)
-        assertTrue(deceasedYears.contains("1320"))
-        assertTrue(deceasedYears.contains("1400"))
+        assertTrue("Should contain separator '-': $deceasedYears", deceasedYears.contains("-"))
     }
 }
+

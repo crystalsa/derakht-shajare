@@ -132,7 +132,7 @@ fun EditGroupDialog(
                     maxLines = 2
                 )
                 
-                Divider(modifier = Modifier.padding(vertical = 4.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 
                 Button(
                     onClick = { showDeleteConfirm = true },

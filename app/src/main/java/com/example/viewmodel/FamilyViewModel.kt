@@ -1651,47 +1651,9 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun getSubtreePersonsAndRelationships(rootId: Long): Pair<List<com.example.data.Person>, List<com.example.data.Relationship>> {
-        val persons = allPersons.value
-        val relationships = allRelationships.value
-        
-        val collectedPersonIds = mutableSetOf<Long>()
-        
-        fun isSpouseRelation(type: String): Boolean {
-            return type == "Spouse" || type == "Divorced" || type == "SecondSpouse" || type == "SecondSpouse_Divorced"
-        }
-
-        fun collectDescendants(personId: Long) {
-            if (!collectedPersonIds.add(personId)) return
-            
-            // Find spouses of this person
-            val spouseIds = relationships.filter { rel ->
-                isSpouseRelation(rel.type) && (rel.personId1 == personId || rel.personId2 == personId)
-            }.flatMap { listOf(it.personId1, it.personId2) }
-             .filter { it != personId }
-            
-            for (spouseId in spouseIds) {
-                collectedPersonIds.add(spouseId)
-            }
-            
-            // Find children of this person or any spouse
-            val parentIds = mutableSetOf(personId).apply { addAll(spouseIds) }
-            val childIds = relationships.filter { rel ->
-                (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") && parentIds.contains(rel.personId1)
-            }.map { it.personId2 }.distinct()
-            
-            for (childId in childIds) {
-                collectDescendants(childId)
-            }
-        }
-        
-        collectDescendants(rootId)
-        
-        val subtreePersons = persons.filter { collectedPersonIds.contains(it.id) }
-        val subtreeRelationships = relationships.filter { rel ->
-            collectedPersonIds.contains(rel.personId1) && collectedPersonIds.contains(rel.personId2)
-        }
-        
-        return Pair(subtreePersons, subtreeRelationships)
+        return com.example.utils.SubtreeExtractor.getSubtreePersonsAndRelationships(
+            rootId, allPersons.value, allRelationships.value
+        )
     }
 
     fun copyPersonSubtreeToNewGroup(

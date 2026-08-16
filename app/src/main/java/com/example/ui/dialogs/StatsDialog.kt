@@ -98,7 +98,7 @@ fun StatsDialog(
                     IconButton(onClick = onDismiss) { Icon(TablerIcons.X, contentDescription = "بستن", tint = textColor) }
                 }
 
-                Divider()
+                HorizontalDivider()
 
                 // Numerical statistics
                 Row(
@@ -163,7 +163,7 @@ fun StatsDialog(
                     }
                 }
 
-                Divider()
+                HorizontalDivider()
 
                 // Demographic summaries
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

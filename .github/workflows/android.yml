@@ -54,6 +54,11 @@ jobs:
         sed -i 's/kotlin.compiler.execution.strategy=in-process/kotlin.compiler.execution.strategy=daemon/g' gradle.properties
 
     - name: Build Debug APK
+      env:
+        DEBUG_KEYSTORE_PATH: ${{ secrets.DEBUG_KEYSTORE_PATH }}
+        DEBUG_STORE_PASSWORD: ${{ secrets.DEBUG_STORE_PASSWORD }}
+        DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
+        DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
       run: gradle :app:assembleDebug -Pkotlin.compiler.execution.strategy=daemon --no-configuration-cache
 
     - name: Prepare Renamed APK

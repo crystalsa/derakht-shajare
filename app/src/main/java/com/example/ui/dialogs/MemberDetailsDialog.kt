@@ -89,7 +89,7 @@ fun PersonProfileContent(
             fontSize = 14.sp,
             color = dialogAccentOrange
         )
-        Divider(color = dialogAccentOrange.copy(alpha = 0.4f))
+        HorizontalDivider(color = dialogAccentOrange.copy(alpha = 0.4f))
 
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Text("جنسیت:", fontWeight = FontWeight.Bold, color = textColor, fontSize = 12.sp)
@@ -157,7 +157,7 @@ fun PersonProfileContent(
             color = dialogAccentOrange,
             modifier = Modifier.padding(top = 8.dp)
         )
-        Divider(color = dialogAccentOrange.copy(alpha = 0.4f))
+        HorizontalDivider(color = dialogAccentOrange.copy(alpha = 0.4f))
 
         if (spouseList.isNotEmpty()) {
             Text(
@@ -167,7 +167,7 @@ fun PersonProfileContent(
                 color = Color(0xFFC2185B),
                 modifier = Modifier.padding(top = 8.dp)
             )
-            Divider(color = Color(0xFFC2185B).copy(alpha = 0.3f))
+            HorizontalDivider(color = Color(0xFFC2185B).copy(alpha = 0.3f))
 
             spouseList.forEach { rel ->
                 val relativeId = if (rel.personId1 == person.id) rel.personId2 else rel.personId1
@@ -222,7 +222,7 @@ fun PersonProfileContent(
                 color = Color(0xFF4A148C),
                 modifier = Modifier.padding(top = 8.dp)
             )
-            Divider(color = Color(0xFF4A148C).copy(alpha = 0.3f))
+            HorizontalDivider(color = Color(0xFF4A148C).copy(alpha = 0.3f))
 
             parentsList.forEach { rel ->
                 val relativeId = if (rel.personId1 == person.id) rel.personId2 else rel.personId1
@@ -266,7 +266,7 @@ fun PersonProfileContent(
                 color = Color(0xFF0288D1),
                 modifier = Modifier.padding(top = 8.dp)
             )
-            Divider(color = Color(0xFF0288D1).copy(alpha = 0.3f))
+            HorizontalDivider(color = Color(0xFF0288D1).copy(alpha = 0.3f))
 
             childrenList.forEach { rel ->
                 val relativeId = if (rel.personId1 == person.id) rel.personId2 else rel.personId1
@@ -314,7 +314,7 @@ fun PersonProfileContent(
                 color = dialogAccentOrange,
                 modifier = Modifier.padding(top = 8.dp)
             )
-            Divider(color = dialogAccentOrange.copy(alpha = 0.4f))
+            HorizontalDivider(color = dialogAccentOrange.copy(alpha = 0.4f))
 
             siblings.forEach { sib ->
                 val relTypeName = if (sib.gender == "Male") "برادر" else "خواهر"
@@ -424,7 +424,7 @@ fun ProfileExportCard(
                     }
                 }
 
-                Divider(color = dialogOrange.copy(alpha = 0.3f), thickness = 1.dp)
+                HorizontalDivider(color = dialogOrange.copy(alpha = 0.3f), thickness = 1.dp)
 
                 PersonProfileContent(
                     person = person,
@@ -441,7 +441,7 @@ fun ProfileExportCard(
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
-                Divider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 1.dp)
+                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 1.dp)
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -724,7 +724,7 @@ fun MemberDetailsDialog(
                                 },
                                 leadingIcon = { Icon(TablerIcons.CloudUpload, contentDescription = null, tint = dialogAccentOrange) }
                             )
-                            Divider(modifier = Modifier.padding(vertical = 4.dp))
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                             DropdownMenuItem(
                                 text = { Text("حذف این عضو فامیل", color = Color.Red) },
                                 onClick = {

@@ -70,6 +70,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import compose.icons.TablerIcons
 import compose.icons.tablericons.*
 import androidx.compose.material3.*
@@ -458,7 +459,7 @@ $databaseError
                                 )
                             }
                             
-                            Divider(modifier = Modifier.padding(vertical = 4.dp))
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                             
                             Text("چیدمان درخت شجره‌نامه", fontWeight = FontWeight.Bold, modifier = Modifier.padding(12.dp, 6.dp), fontSize = 12.sp, color = accentColor)
                             DropdownMenuItem(
@@ -530,15 +531,15 @@ $databaseError
                                 { viewModel.setFocusPersonId(null) }
                             )
                             isTreeExpanded -> Pair(
-                                Icons.Default.ArrowBack,
+                                Icons.AutoMirrored.Filled.ArrowBack,
                                 { isTreeExpanded = false }
                             )
                             isViewingTree -> Pair(
-                                Icons.Default.ArrowBack,
+                                Icons.AutoMirrored.Filled.ArrowBack,
                                 { isViewingTree = false }
                             )
                             else -> Pair(
-                                Icons.Default.ArrowBack,
+                                Icons.AutoMirrored.Filled.ArrowBack,
                                 {
                                     val parentId = allFolders.find { it.id == currentFolderId }?.parentId
                                     viewModel.setCurrentFolderId(parentId)
@@ -2484,7 +2485,7 @@ $databaseError
                                     .background(accentColor.copy(alpha = 0.15f), CircleShape)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.KeyboardArrowLeft,
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                                     contentDescription = "قبلی",
                                     tint = accentColor,
                                     modifier = Modifier.size(24.dp)
@@ -2518,7 +2519,7 @@ $databaseError
                                     .background(accentColor.copy(alpha = 0.15f), CircleShape)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.KeyboardArrowRight,
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                     contentDescription = "بعدی",
                                     tint = accentColor,
                                     modifier = Modifier.size(24.dp)
@@ -2731,7 +2732,7 @@ $databaseError
                                 .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.KeyboardArrowLeft,
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                                 contentDescription = "قبلی",
                                 tint = Color.White,
                                 modifier = Modifier.size(28.dp)
@@ -2748,7 +2749,7 @@ $databaseError
                                 .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.KeyboardArrowRight,
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = "بعدی",
                                 tint = Color.White,
                                 modifier = Modifier.size(28.dp)
@@ -3423,7 +3424,7 @@ $databaseError
                             Text("ذخیره به عنوان فایل (.json) در گوشی", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                         
-                        Divider(modifier = Modifier.padding(vertical = 4.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         
                         Text(
                             text = "روش جایگزین: کپی کردن کد متنی زیر و ذخیره آن:",
@@ -3511,7 +3512,7 @@ $databaseError
                         Text("انتخاب فایل بکاپ (.json) از گوشی", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                     
-                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     
                     Text(
                         text = "روش جایگزین: قرار دادن کد متنی پشتیبان در کادر زیر:",
@@ -3711,7 +3712,7 @@ $databaseError
                             Text("ذخیره به عنوان فایل (.json) در گوشی", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                         
-                        Divider(modifier = Modifier.padding(vertical = 4.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         
                         Text(
                             text = "روش جایگزین: کپی کردن کد متنی زیر و ذخیره آن:",
@@ -3818,7 +3819,7 @@ $databaseError
                         Text("انتخاب فایل بکاپ عضو (.json) از گوشی", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                     
-                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     
                     Text(
                         text = "روش جایگزین: قرار دادن کد متنی پشتیبان در کادر زیر:",
@@ -4423,7 +4424,7 @@ private fun RelationshipHighlightBanner(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.AltRoute,
+                        imageVector = Icons.AutoMirrored.Filled.AltRoute,
                         contentDescription = null,
                         tint = Color(0xFFE65100),
                         modifier = Modifier.size(18.dp)

@@ -46,8 +46,8 @@ object RelationshipCalculator {
         allPersons: List<Person>,
         allRelationships: List<Relationship>
     ): List<Pair<Person, String>>? {
-        val paths = findAllPaths(personA, personB, allPersons, allRelationships, maxDepth = 6, maxPaths = 1)
-        return paths.firstOrNull()
+        val paths = findAllPaths(personA, personB, allPersons, allRelationships, maxDepth = 6, maxPaths = 50)
+        return paths.minByOrNull { it.size }
     }
 
     /**
@@ -92,6 +92,10 @@ object RelationshipCalculator {
         ) {
             if (resultPaths.size >= maxPaths || depth > maxDepth) return
 
+            // Branch-and-bound optimization: prune branches that already exceed the shortest path found so far
+            val shortestFound = resultPaths.minOfOrNull { it.size }
+            if (shortestFound != null && currentPath.size > shortestFound) return
+
             if (currentPersonId == personB.id) {
                 resultPaths.add(ArrayList(currentPath))
                 return
@@ -121,28 +125,50 @@ object RelationshipCalculator {
 
     private val STANDARD_TERMS = setOf(
         "پدر", "مادر", "پسر", "دختر",
-        "شوهر", "زن", "همسر", "همسر سابق",
-        "برادر", "خواهر",
-        "پدر بزرگ", "مادر بزرگ", "پدربزرگ", "مادربزرگ", "نوه",
+        "شوهر", "زن", "همسر", "همسر سابق", "هوو",
+        "برادر", "خواهر", "برادر ناتنی", "خواهر ناتنی", "برادر ناتنی هم‌پدر", "برادر ناتنی هم‌مادر", "خواهر ناتنی هم‌پدر", "خواهر ناتنی هم‌مادر",
+        "پدر بزرگ", "مادر بزرگ", "پدربزرگ", "مادربزرگ", "پدربزرگ پدری", "مادربزرگ پدری", "پدربزرگ مادری", "مادربزرگ مادری",
+        "جد پدری", "جده پدری", "جد مادری", "جده مادری", "جد بزرگ", "جده بزرگ", "جد اعلا", "جده اعلا",
+        "نوه", "نوه پسری", "نوه دختری", "نوه‌ی پسری", "نوه‌ی دختری", "نتیجه", "نبیره", "ندیده",
         "عمو", "عمه", "دایی", "خاله",
         "برادرزاده", "خواهرزاده",
         "پسرعمو", "دخترعمو", "پسرعمه", "دخترعمه",
         "پسردایی", "دختردایی", "پسرخاله", "دخترخاله",
-        "پدر همسر", "مادر همسر", "داماد", "عروس",
-        "برادر همسر", "خواهر همسر", "زن برادر", "شوهر خواهر", "باجناق", "جاری",
-        "ناپدری", "نامادری", "پدرخوانده", "مادرخوانده", "فرزندخوانده",
-        "جد بزرگ", "جده بزرگ", "نبیره", "ندیده",
+        "پدر همسر", "مادر همسر", "پدرزن", "مادرزن", "پدرشوهر", "مادرشوهر",
+        "برادر همسر", "خواهر همسر", "برادرزن", "خواهرزن", "برادرشوهر", "خواهرشوهر",
+        "داماد", "عروس", "داماد نوه", "عروس نوه", "داماد نتیجه", "عروس نتیجه", "داماد نبیره", "عروس نبیره",
+        "زن برادر", "شوهر خواهر", "باجناق", "جاری",
+        "ناپدری", "نامادری", "پدرخوانده", "مادرخوانده", "فرزندخوانده", "پسرخوانده", "دخترخوانده",
+        "پسر همسر", "دختر همسر", "ربیب", "ربیبه", "نوه‌ی همسر", "نوه همسر",
+        "زن عمو", "شوهر عمه", "زن دایی", "شوهر خاله",
         "عموی همسر", "عمه همسر", "دایی همسر", "خاله همسر",
-        "پدربزرگ همسر", "مادربزرگ همسر"
+        "پدربزرگ همسر", "مادربزرگ همسر", "جد اعلای همسر", "جده اعلای همسر",
+        "برادرزاده همسر", "خواهرزاده همسر",
+        "زن برادرزاده", "شوهر برادرزاده", "زن خواهرزاده", "شوهر خواهرزاده",
+        "زن برادر همسر", "شوهر خواهر همسر",
+        "عموی پدر", "عمه پدر", "دایی پدر", "خاله پدر",
+        "عموی مادر", "عمه مادر", "دایی مادر", "خاله مادر",
+        "زن عموی پدر", "شوهر عمه پدر", "زن دایی پدر", "شوهر خاله پدر",
+        "زن عموی مادر", "شوهر عمه مادر", "زن دایی مادر", "شوهر خاله مادر",
+        "پسر عموی پدر", "دختر عموی پدر", "پسر عمه پدر", "دختر عمه پدر",
+        "پسر دایی پدر", "دختر دایی پدر", "پسر خاله پدر", "دختر خاله پدر",
+        "پسر عموی مادر", "دختر عموی مادر", "پسر عمه مادر", "دختر عمه مادر",
+        "پسر دایی مادر", "دختر دایی مادر", "پسر خاله مادر", "دختر خاله مادر",
+        "نوه‌ی برادر", "نوه‌ی خواهر", "نوه برادر", "نوه خواهر",
+        "زن پسرعمو", "شوهر دخترعمو", "زن پسردایی", "شوهر دختردایی", "زن پسرخاله", "شوهر دخترخاله", "زن پسرعمه", "شوهر دخترعمه",
+        "پسر پسرعمو", "دختر پسرعمو", "پسر پسردایی", "دختر پسردایی", "پسر پسرخاله", "دختر پسرخاله", "پسر پسرعمه", "دختر پسرعمه",
+        "پسر عموزاده", "دختر عموزاده", "پسر دایی‌زاده", "دختر دایی‌زاده", "پسر خاله‌زاده", "دختر خاله‌زاده", "پسر عمه‌زاده", "دختر عمه‌زاده",
+        "پسرعموی همسر", "دخترعموی همسر", "پسردایی همسر", "دختردایی همسر", "پسرخاله‌ی همسر", "دخترخاله‌ی همسر", "پسرعمه‌ی همسر", "دخترعمه‌ی همسر"
     )
 
     private fun isStandardTerm(term: String): Boolean {
-        if (STANDARD_TERMS.contains(term)) return true
-        if (term.endsWith(" همسر")) {
-            val base = term.removeSuffix(" همسر")
-            if (STANDARD_TERMS.contains(base)) return true
+        val clean = cleanTerm(term)
+        if (clean.isBlank() || clean == "خویشاوند" || clean == "نامشخص") return false
+        if (STANDARD_TERMS.contains(clean) || STANDARD_TERMS.contains(term)) return true
+        if (clean.endsWith(" همسر") || clean.endsWith(" نوه") || clean.endsWith(" برادر") || clean.endsWith(" خواهر") || clean.endsWith(" پدر") || clean.endsWith(" مادر")) {
+            return true
         }
-        return false
+        return true
     }
 
     /**
@@ -150,8 +176,17 @@ object RelationshipCalculator {
      */
     fun getRelationLabelFromSteps(steps: List<String>, personA: Person, personB: Person): String {
         val size = steps.size
+        if (size == 0) return "خودِ شخص"
 
-        // Direct relationships
+        fun isParent(s: String) = s == "FATHER" || s == "MOTHER" || s == "ADOPTIVE_FATHER" || s == "ADOPTIVE_MOTHER"
+        fun isFather(s: String) = s == "FATHER" || s == "ADOPTIVE_FATHER"
+        fun isMother(s: String) = s == "MOTHER" || s == "ADOPTIVE_MOTHER"
+        fun isChild(s: String) = s == "SON" || s == "DAUGHTER" || s == "ADOPTIVE_SON" || s == "ADOPTIVE_DAUGHTER"
+        fun isSon(s: String) = s == "SON" || s == "ADOPTIVE_SON"
+        fun isDaughter(s: String) = s == "DAUGHTER" || s == "ADOPTIVE_DAUGHTER"
+        fun isSpouse(s: String) = s == "SPOUSE"
+
+        // 1 STEP (Direct)
         if (size == 1) {
             return when (steps[0]) {
                 "FATHER" -> "پدرِ"
@@ -162,146 +197,311 @@ object RelationshipCalculator {
                 "EX_SPOUSE" -> "همسر سابقِ"
                 "ADOPTIVE_FATHER" -> "پدرخوانده‌ی"
                 "ADOPTIVE_MOTHER" -> "مادرخوانده‌ی"
-                "ADOPTIVE_SON" -> "فرزندخوانده‌ی"
-                "ADOPTIVE_DAUGHTER" -> "فرزندخوانده‌ی"
+                "ADOPTIVE_SON" -> "پسرخوانده‌ی"
+                "ADOPTIVE_DAUGHTER" -> "دخترخوانده‌ی"
                 else -> "خویشاوندِ"
             }
         }
 
-        // Two-step relationships
+        // 2 STEPS
         if (size == 2) {
-            val s1 = steps[0]
-            val s2 = steps[1]
+            val (s1, s2) = steps
 
-            // Sibling check: Parent -> Child (B -> Parent -> A)
-            if ((s1 == "FATHER" || s1 == "MOTHER") && (s2 == "SON" || s2 == "DAUGHTER")) {
+            // Sibling: Parent -> Child (B -> Parent -> Sibling A)
+            if (isParent(s1) && isChild(s2)) {
                 return if (personA.gender == "Male") "برادرِ" else "خواهرِ"
             }
 
-            // Grandparent check: Parent -> Parent (B -> Parent -> Grandparent)
-            if ((s1 == "FATHER" || s1 == "MOTHER") && (s2 == "FATHER" || s2 == "MOTHER")) {
-                return if (personA.gender == "Male") "پدربزرگِ" else "مادربزرگِ"
+            // Grandparent: Parent -> Parent (B -> Parent -> Grandparent A)
+            if (isParent(s1) && isParent(s2)) {
+                return if (isFather(s1)) {
+                    if (isFather(s2)) "پدربزرگِ پدریِ" else "مادربزرگِ پدریِ"
+                } else {
+                    if (isFather(s2)) "پدربزرگِ مادریِ" else "مادربزرگِ مادریِ"
+                }
             }
 
-            // Grandchild check: Child -> Child (B -> Child -> Grandchild)
-            if ((s1 == "SON" || s1 == "DAUGHTER") && (s2 == "SON" || s2 == "DAUGHTER")) {
-                return "نوه‌ی"
+            // Grandchild: Child -> Child (B -> Child -> Grandchild A)
+            if (isChild(s1) && isChild(s2)) {
+                return if (isSon(s1)) "نوه‌ی پسریِ" else "نوه‌ی دختریِ"
             }
 
-            // Spouse parent
-            if (s1 == "SPOUSE" && (s2 == "FATHER" || s2 == "MOTHER")) {
-                return if (s2 == "FATHER") "پدر همسرِ" else "مادر همسرِ"
+            // Spouse's Parent: Spouse -> Parent (B -> Spouse -> Parent A)
+            if (isSpouse(s1) && isParent(s2)) {
+                return if (personB.gender == "Male") {
+                    if (isFather(s2)) "پدرزنِ" else "مادرزنِ"
+                } else if (personB.gender == "Female") {
+                    if (isFather(s2)) "پدرشوهرِ" else "مادرشوهرِ"
+                } else {
+                    if (isFather(s2)) "پدر همسرِ" else "مادر همسرِ"
+                }
             }
 
-            // Child's spouse (Daughter-in-law / Son-in-law)
-            if ((s1 == "SON" || s1 == "DAUGHTER") && s2 == "SPOUSE") {
+            // Child's Spouse (عروس / داماد): Child -> Spouse (B -> Child -> Spouse A)
+            if (isChild(s1) && isSpouse(s2)) {
                 return if (personA.gender == "Male") "دامادِ" else "عروسِ"
             }
 
-            // Spouse child
-            if (s1 == "SPOUSE" && (s2 == "SON" || s2 == "DAUGHTER")) {
-                return if (s2 == "SON") "پسرِ همسرِ" else "دخترِ همسرِ"
+            // Spouse's Child (Stepchild / ربیب و ربیبه): Spouse -> Child (B -> Spouse -> Stepchild A)
+            if (isSpouse(s1) && isChild(s2)) {
+                return if (personA.gender == "Male") "پسر همسرِ (ربیبِ)" else "دختر همسرِ (ربیبه‌ی)"
+            }
+
+            // Stepparent: Parent -> Spouse
+            if (isParent(s1) && isSpouse(s2)) {
+                return if (personA.gender == "Male") "ناپدریِ" else "نامادریِ"
+            }
+
+            // Co-wife (هوو): Spouse -> Spouse (Two wives of the same husband)
+            if (isSpouse(s1) && isSpouse(s2)) {
+                if (personB.gender == "Female" && personA.gender == "Female") {
+                    return "هوویِ"
+                }
             }
         }
 
-        // Three-step relationships
+        // 3 STEPS
         if (size == 3) {
-            val s1 = steps[0]
-            val s2 = steps[1]
-            val s3 = steps[2]
+            val (s1, s2, s3) = steps
 
-            // Great-grandparent: Parent -> Parent -> Parent
-            val allParents = steps.all { it == "FATHER" || it == "MOTHER" }
-            if (allParents) {
-                return if (personA.gender == "Male") "جد بزرگِ" else "جده بزرگِ"
+            // Great-grandparent (جد اعلا / جد بزرگ): Parent -> Parent -> Parent
+            if (isParent(s1) && isParent(s2) && isParent(s3)) {
+                return if (personA.gender == "Male") "جد اعلایِ" else "جدّه اعلایِ"
             }
 
-            // Great-grandchild (نبیره): Child -> Child -> Child
-            val allChildren = steps.all { it == "SON" || it == "DAUGHTER" }
-            if (allChildren) {
+            // Great-grandchild (نتیجه): Child -> Child -> Child (فرزند نوه)
+            if (isChild(s1) && isChild(s2) && isChild(s3)) {
+                return "نتیجه‌ی"
+            }
+
+            // Aunt / Uncle: Parent -> Parent -> Child (B -> Parent -> Grandparent -> Aunt/Uncle A)
+            if (isParent(s1) && isParent(s2) && isChild(s3)) {
+                return if (isFather(s1)) {
+                    if (isSon(s3)) "عمویِ" else "عمه‌ی"
+                } else {
+                    if (isSon(s3)) "داییِ" else "خاله‌ی"
+                }
+            }
+
+            // Niece / Nephew: Parent -> Child -> Child (B -> Parent -> Sibling -> Niece/Nephew A)
+            if (isParent(s1) && isChild(s2) && isChild(s3)) {
+                val isBrother = isSon(s2)
+                return if (isBrother) "برادرزاده‌ی" else "خواهرزاده‌ی"
+            }
+
+            // Sibling's Spouse (زن برادر / شوهر خواهر): Parent -> Child -> Spouse
+            if (isParent(s1) && isChild(s2) && isSpouse(s3)) {
+                return if (isSon(s2)) "زن برادرِ" else "شوهر خواهرِ"
+            }
+
+            // Spouse's Sibling (برادرزن / خواهرزن / برادرشوهر / خواهرشوهر): Spouse -> Parent -> Child
+            if (isSpouse(s1) && isParent(s2) && isChild(s3)) {
+                return if (personB.gender == "Male") {
+                    if (isSon(s3)) "برادرزنِ" else "خواهرزنِ"
+                } else if (personB.gender == "Female") {
+                    if (isSon(s3)) "برادرشوهرِ" else "خواهرشوهرِ"
+                } else {
+                    if (isSon(s3)) "برادر همسرِ" else "خواهر همسرِ"
+                }
+            }
+
+            // Grandchild's Spouse (عروس نوه / داماد نوه): Child -> Child -> Spouse (B -> Child -> Grandchild -> Spouse A)
+            if (isChild(s1) && isChild(s2) && isSpouse(s3)) {
+                return if (personA.gender == "Male") "دامادِ نوه‌ی" else "عروسِ نوه‌ی"
+            }
+
+            // Spouse's Grandparent (پدربزرگ همسر / مادربزرگ همسر): Spouse -> Parent -> Parent (B -> Spouse -> Parent -> Grandparent A)
+            if (isSpouse(s1) && isParent(s2) && isParent(s3)) {
+                return if (isFather(s3)) "پدربزرگِ همسرِ" else "مادربزرگِ همسرِ"
+            }
+
+            // Spouse's Grandchild: Spouse -> Child -> Child
+            if (isSpouse(s1) && isChild(s2) && isChild(s3)) {
+                return "نوه‌ی همسرِ"
+            }
+
+            // Stepparent's Child (Stepsibling): Parent -> Spouse -> Child
+            if (isParent(s1) && isSpouse(s2) && isChild(s3)) {
+                val side = if (isFather(s1)) "هم‌پدر" else "هم‌مادر"
+                return if (personA.gender == "Male") "برادر ناتنیِ ($sideِ)" else "خواهر ناتنیِ ($sideِ)"
+            }
+        }
+
+        // 4 STEPS
+        if (size == 4) {
+            val (s1, s2, s3, s4) = steps
+
+            // Great-great-grandchild (نبیره): Child -> Child -> Child -> Child (فرزند نتیجه)
+            if (isChild(s1) && isChild(s2) && isChild(s3) && isChild(s4)) {
                 return "نبیره‌ی"
             }
 
-            // Aunt/Uncle: Parent -> Parent -> Child (B -> Parent -> Grandparent -> Aunt/Uncle)
-            if ((s1 == "FATHER" || s1 == "MOTHER") && (s2 == "FATHER" || s2 == "MOTHER") && (s3 == "SON" || s3 == "DAUGHTER")) {
-                return if (s1 == "FATHER") {
-                    if (s3 == "SON") "عمویِ" else "عمه‌ی"
+            // Great-great-grandparent (جد اعلا): Parent -> Parent -> Parent -> Parent
+            if (isParent(s1) && isParent(s2) && isParent(s3) && isParent(s4)) {
+                return if (personA.gender == "Male") "جد اعلایِ" else "جدّه اعلایِ"
+            }
+
+            // Great-Uncle / Great-Aunt (عموی پدر/مادر، عمه پدر/مادر، دایی پدر/مادر، خاله پدر/مادر): Parent -> Parent -> Parent -> Child
+            if (isParent(s1) && isParent(s2) && isParent(s3) && isChild(s4)) {
+                val parentWord = if (isFather(s1)) "پدر" else "مادر"
+                val uncleWord = if (isFather(s2)) {
+                    if (isSon(s4)) "عمویِ" else "عمه‌ی"
                 } else {
-                    if (s3 == "SON") "داییِ" else "خاله‌ی"
+                    if (isSon(s4)) "داییِ" else "خاله‌ی"
                 }
+                return "$uncleWord $parentWordِ"
             }
 
-            // Niece/Nephew: Parent -> Child -> Child (B -> Sibling -> Niece/Nephew)
-            if ((s1 == "FATHER" || s1 == "MOTHER") && (s2 == "SON" || s2 == "DAUGHTER") && (s3 == "SON" || s3 == "DAUGHTER")) {
-                val isBrother = s2 == "SON"
-                return if (isBrother) {
-                    "برادرزاده‌ی"
+            // Cousins: Parent -> Parent -> Child -> Child (B -> Parent -> Grandparent -> Aunt/Uncle -> Cousin A)
+            if (isParent(s1) && isParent(s2) && isChild(s3) && isChild(s4)) {
+                val uncleAunt = if (isFather(s1)) {
+                    if (isSon(s3)) "عمو" else "عمه"
                 } else {
-                    "خواهرزاده‌ی"
-                }
-            }
-
-            // Sibling's spouse (زن داداش / شوهر خواهر)
-            if ((s1 == "FATHER" || s1 == "MOTHER") && (s2 == "SON" || s2 == "DAUGHTER") && s3 == "SPOUSE") {
-                return if (s2 == "SON") "زن برادرِ" else "شوهر خواهرِ"
-            }
-
-            // Spouse Sibling
-            if (s1 == "SPOUSE" && (s2 == "FATHER" || s2 == "MOTHER") && (s3 == "SON" || s3 == "DAUGHTER")) {
-                return if (s3 == "SON") "برادر همسرِ" else "خواهر همسرِ"
-            }
-        }
-
-        // Four-step relationships
-        if (size == 4) {
-            val s1 = steps[0]
-            val s2 = steps[1]
-            val s3 = steps[2]
-            val s4 = steps[3]
-
-            // Great-great-grandchild (ندیده): Child -> Child -> Child -> Child
-            val allChildren = steps.all { it == "SON" || it == "DAUGHTER" }
-            if (allChildren) {
-                return "ندیده‌ی"
-            }
-
-            // Cousin: Parent -> Parent -> Child -> Child (B -> Parent -> Grandparent -> Aunt/Uncle -> Cousin)
-            if ((s1 == "FATHER" || s1 == "MOTHER") && (s2 == "FATHER" || s2 == "MOTHER") && (s3 == "SON" || s3 == "DAUGHTER") && (s4 == "SON" || s4 == "DAUGHTER")) {
-                val uncleAunt = if (s1 == "FATHER") {
-                    if (s3 == "SON") "عمو" else "عمه"
-                } else {
-                    if (s3 == "SON") "دایی" else "خاله"
+                    if (isSon(s3)) "دایی" else "خاله"
                 }
 
                 return when (uncleAunt) {
-                    "عمو" -> if (s4 == "SON") "پسرعمویِ" else "دخترعمویِ"
-                    "عمه" -> if (s4 == "SON") "پسرعمه‌ی" else "دخترعمه‌ی"
-                    "دایی" -> if (s4 == "SON") "پسرداییِ" else "دخترداییِ"
-                    "خاله" -> if (s4 == "SON") "پسرخاله‌ی" else "دخترخاله‌ی"
+                    "عمو" -> if (isSon(s4)) "پسرعمویِ" else "دخترعمویِ"
+                    "عمه" -> if (isSon(s4)) "پسرعمه‌ی" else "دخترعمه‌ی"
+                    "دایی" -> if (isSon(s4)) "پسرداییِ" else "دخترداییِ"
+                    "خاله" -> if (isSon(s4)) "پسرخاله‌ی" else "دخترخاله‌ی"
                     else -> "خویشاوندِ"
                 }
             }
 
-            // Aunt/Uncle spouse (زن عمو, شوهر عمه, زن دایی, شوهر خاله)
-            if ((s1 == "FATHER" || s1 == "MOTHER") && (s2 == "FATHER" || s2 == "MOTHER") && (s3 == "SON" || s3 == "DAUGHTER") && s4 == "SPOUSE") {
-                return if (s1 == "FATHER") {
-                    if (s3 == "SON") "زن عمویِ" else "شوهر عمه‌ی"
+            // Aunt/Uncle spouse (زن عمو, شوهر عمه, زن دایی, شوهر خاله): Parent -> Parent -> Child -> Spouse
+            if (isParent(s1) && isParent(s2) && isChild(s3) && isSpouse(s4)) {
+                return if (isFather(s1)) {
+                    if (isSon(s3)) "زن عمویِ" else "شوهر عمه‌ی"
                 } else {
-                    if (s3 == "SON") "زن داییِ" else "شوهر خاله‌ی"
+                    if (isSon(s3)) "زن داییِ" else "شوهر خاله‌ی"
                 }
             }
 
-            // Bajenagh / Jari (B -> Spouse -> Parent -> Sibling -> Spouse)
-            if (s1 == "SPOUSE" && (s2 == "FATHER" || s2 == "MOTHER") && (s3 == "SON" || s3 == "DAUGHTER") && s4 == "SPOUSE") {
+            // Bajenagh / Jari / Sibling-in-law's spouse: Spouse -> Parent -> Child -> Spouse
+            if (isSpouse(s1) && isParent(s2) && isChild(s3) && isSpouse(s4)) {
                 if (personB.gender == "Male" && personA.gender == "Male") return "باجناقِ"
                 if (personB.gender == "Female" && personA.gender == "Female") return "جاریِ"
+                return if (personA.gender == "Male") "شوهر خواهر همسرِ" else "زن برادر همسرِ"
+            }
+
+            // Niece/Nephew's Spouse: Parent -> Child -> Child -> Spouse
+            if (isParent(s1) && isChild(s2) && isChild(s3) && isSpouse(s4)) {
+                return if (isSon(s2)) {
+                    if (personA.gender == "Female") "زن برادرزاده‌ی" else "شوهر برادرزاده‌ی"
+                } else {
+                    if (personA.gender == "Female") "زن خواهرزاده‌ی" else "شوهر خواهرزاده‌ی"
+                }
+            }
+
+            // Spouse's Niece/Nephew: Spouse -> Parent -> Child -> Child
+            if (isSpouse(s1) && isParent(s2) && isChild(s3) && isChild(s4)) {
+                return if (isSon(s3)) "برادرزاده‌ی همسرِ" else "خواهرزاده‌ی همسرِ"
+            }
+
+            // Spouse's Aunt/Uncle: Spouse -> Parent -> Parent -> Child
+            if (isSpouse(s1) && isParent(s2) && isParent(s3) && isChild(s4)) {
+                return if (isFather(s2)) {
+                    if (isSon(s4)) "عمویِ همسرِ" else "عمه‌ی همسرِ"
+                } else {
+                    if (isSon(s4)) "داییِ همسرِ" else "خاله‌ی همسرِ"
+                }
+            }
+
+            // Grand-niece / Grand-nephew (نوه برادر / نوه خواهر): Parent -> Child -> Child -> Child
+            if (isParent(s1) && isChild(s2) && isChild(s3) && isChild(s4)) {
+                return if (isSon(s2)) "نوه‌ی برادرِ" else "نوه‌ی خواهرِ"
+            }
+
+            // Great-grandchild's spouse (عروس نتیجه / داماد نتیجه): Child -> Child -> Child -> Spouse
+            if (isChild(s1) && isChild(s2) && isChild(s3) && isSpouse(s4)) {
+                return if (personA.gender == "Male") "دامادِ نتیجه‌ی" else "عروسِ نتیجه‌ی"
+            }
+
+            // Spouse's great-grandparent: Spouse -> Parent -> Parent -> Parent
+            if (isSpouse(s1) && isParent(s2) && isParent(s3) && isParent(s4)) {
+                return if (personA.gender == "Male") "جد اعلایِ همسرِ" else "جدّه اعلایِ همسرِ"
+            }
+        }
+
+        // 5 STEPS
+        if (size == 5) {
+            val (s1, s2, s3, s4, s5) = steps
+
+            // Great-great-great-grandchild (ندیده): Child -> Child -> Child -> Child -> Child (فرزند نبیره)
+            if (isChild(s1) && isChild(s2) && isChild(s3) && isChild(s4) && isChild(s5)) {
+                return "ندیده‌ی"
+            }
+
+            // Parents' Cousins' Children: Parent -> Parent -> Parent -> Child -> Child (پسرِ عموی پدر، دخترِ دایی مادر و ...)
+            if (isParent(s1) && isParent(s2) && isParent(s3) && isChild(s4) && isChild(s5)) {
+                val parentWord = if (isFather(s1)) "پدر" else "مادر"
+                val uncleWord = if (isFather(s2)) {
+                    if (isSon(s4)) "عمویِ" else "عمه‌ی"
+                } else {
+                    if (isSon(s4)) "داییِ" else "خاله‌ی"
+                }
+                val childPrefix = if (isSon(s5)) "پسرِ" else "دخترِ"
+                return "$childPrefix $uncleWord $parentWordِ"
+            }
+
+            // Spouses of Parents' Aunts/Uncles: Parent -> Parent -> Parent -> Child -> Spouse (شوهرعمه پدر، زن عموی مادر و ...)
+            if (isParent(s1) && isParent(s2) && isParent(s3) && isChild(s4) && isSpouse(s5)) {
+                val parentWord = if (isFather(s1)) "پدر" else "مادر"
+                val spouseRelation = if (isFather(s2)) {
+                    if (isSon(s4)) "زن عمویِ" else "شوهر عمه‌ی"
+                } else {
+                    if (isSon(s4)) "زن داییِ" else "شوهر خاله‌ی"
+                }
+                return "$spouseRelation $parentWordِ"
+            }
+
+            // Cousin's child (فرزند پسرعمو/دختردایی/...): Parent -> Parent -> Child -> Child -> Child
+            if (isParent(s1) && isParent(s2) && isChild(s3) && isChild(s4) && isChild(s5)) {
+                val cousinBase = if (isFather(s1)) {
+                    if (isSon(s3)) (if (isSon(s4)) "پسرعمویِ" else "دخترعمویِ")
+                    else (if (isSon(s4)) "پسرعمه‌ی" else "دخترعمه‌ی")
+                } else {
+                    if (isSon(s3)) (if (isSon(s4)) "پسرداییِ" else "دخترداییِ")
+                    else (if (isSon(s4)) "پسرخاله‌ی" else "دخترخاله‌ی")
+                }
+                return if (isSon(s5)) "پسرِ $cousinBase" else "دخترِ $cousinBase"
+            }
+
+            // Cousin's spouse (همسر پسرعمو/دخترخاله/...): Parent -> Parent -> Child -> Child -> Spouse
+            if (isParent(s1) && isParent(s2) && isChild(s3) && isChild(s4) && isSpouse(s5)) {
+                val cousinBase = if (isFather(s1)) {
+                    if (isSon(s3)) (if (isSon(s4)) "پسرعمویِ" else "دخترعمویِ")
+                    else (if (isSon(s4)) "پسرعمه‌ی" else "دخترعمه‌ی")
+                } else {
+                    if (isSon(s3)) (if (isSon(s4)) "پسرداییِ" else "دخترداییِ")
+                    else (if (isSon(s4)) "پسرخاله‌ی" else "دخترخاله‌ی")
+                }
+                return if (personA.gender == "Female") "زن $cousinBase" else "شوهر $cousinBase"
+            }
+
+            // Spouse's cousin: Spouse -> Parent -> Parent -> Child -> Child
+            if (isSpouse(s1) && isParent(s2) && isParent(s3) && isChild(s4) && isChild(s5)) {
+                val cousinBase = if (isFather(s2)) {
+                    if (isSon(s4)) (if (isSon(s5)) "پسرعمویِ" else "دخترعمویِ")
+                    else (if (isSon(s5)) "پسرعمه‌ی" else "دخترعمه‌ی")
+                } else {
+                    if (isSon(s4)) (if (isSon(s5)) "پسرداییِ" else "دخترداییِ")
+                    else (if (isSon(s5)) "پسرخاله‌ی" else "دخترخاله‌ی")
+                }
+                return "$cousinBase همسرِ"
+            }
+
+            // Great-great-grandchild's spouse (عروس نبیره / داماد نبیره): Child -> Child -> Child -> Child -> Spouse
+            if (isChild(s1) && isChild(s2) && isChild(s3) && isChild(s4) && isSpouse(s5)) {
+                return if (personA.gender == "Male") "دامادِ نبیره‌ی" else "عروسِ نبیره‌ی"
             }
         }
 
         return "خویشاوندِ"
     }
 
-    private fun cleanTerm(raw: String): String {
+    fun cleanTerm(raw: String): String {
         var term = raw.trim()
         if (term.endsWith("ِ")) {
             term = term.substring(0, term.length - 1).trim()
@@ -311,7 +511,7 @@ object RelationshipCalculator {
             if (!term.endsWith("ه") && !term.endsWith("ة")) {
                 term += "ه"
             }
-        } else if (term.endsWith("ی") && !term.endsWith("دایی") && !term.endsWith("عمو") && !term.endsWith("عمه") && !term.endsWith("خاله")) {
+        } else if (term.endsWith("ی") && !term.endsWith("دایی") && !term.endsWith("عمو") && !term.endsWith("عمه") && !term.endsWith("خاله") && !term.endsWith("جاری") && !term.endsWith("ناپدری") && !term.endsWith("نامادری") && !term.endsWith("پسردایی") && !term.endsWith("دختردایی") && !term.endsWith("ناتنی") && !term.endsWith("پدری") && !term.endsWith("مادری") && !term.endsWith("پسری") && !term.endsWith("دختری")) {
             term = term.substring(0, term.length - 1).trim()
         }
         if (term == "مادربزرگ") term = "مادر بزرگ"
@@ -319,11 +519,130 @@ object RelationshipCalculator {
         return term
     }
 
-    private fun addEzafeToTerm(term: String): String {
-        if (term == "خویشاوند") return "خویشاوندِ"
-        if (term.endsWith("ه") || term.endsWith("ة")) return "${term}‌ی"
-        if (term.endsWith("ا") || term.endsWith("و") || term.endsWith("ی")) return "${term}یِ"
-        return "${term}ِ"
+    fun addEzafeToTerm(term: String): String {
+        val clean = cleanTerm(term)
+        return when (clean) {
+            "پدر" -> "پدرِ"
+            "مادر" -> "مادرِ"
+            "پسر" -> "پسرِ"
+            "دختر" -> "دخترِ"
+            "شوهر" -> "شوهرِ"
+            "زن" -> "زنِ"
+            "همسر" -> "همسرِ"
+            "همسر سابق" -> "همسر سابقِ"
+            "برادر" -> "برادرِ"
+            "خواهر" -> "خواهرِ"
+            "برادر ناتنی" -> "برادر ناتنیِ"
+            "خواهر ناتنی" -> "خواهر ناتنیِ"
+            "پدربزرگ", "پدر بزرگ" -> "پدربزرگِ"
+            "مادربزرگ", "مادر بزرگ" -> "مادربزرگِ"
+            "نوه" -> "نوه‌ی"
+            "عمو" -> "عمویِ"
+            "عمه" -> "عمه‌ی"
+            "دایی" -> "داییِ"
+            "خاله" -> "خاله‌ی"
+            "برادرزاده" -> "برادرزاده‌ی"
+            "خواهرزاده" -> "خواهرزاده‌ی"
+            "پسرعمو" -> "پسرعمویِ"
+            "دخترعمو" -> "دخترعمویِ"
+            "پسرعمه" -> "پسرعمه‌ی"
+            "دخترعمه" -> "دخترعمه‌ی"
+            "پسردایی" -> "پسرداییِ"
+            "دختردایی" -> "دخترداییِ"
+            "پسرخاله" -> "پسرخاله‌ی"
+            "دخترخاله" -> "دخترخاله‌ی"
+            "داماد" -> "دامادِ"
+            "عروس" -> "عروسِ"
+            "عروس نوه" -> "عروسِ نوه‌ی"
+            "داماد نوه" -> "دامادِ نوه‌ی"
+            "پدر همسر" -> "پدر همسرِ"
+            "مادر همسر" -> "مادر همسرِ"
+            "پدرزن" -> "پدرزنِ"
+            "مادرزن" -> "مادرزنِ"
+            "پدرشوهر" -> "پدرشوهرِ"
+            "مادرشوهر" -> "مادرشوهرِ"
+            "برادر همسر" -> "برادر همسرِ"
+            "خواهر همسر" -> "خواهر همسرِ"
+            "برادرزن" -> "برادرزنِ"
+            "خواهرزن" -> "خواهرزنِ"
+            "برادرشوهر" -> "برادرشوهرِ"
+            "خواهرشوهر" -> "خواهرشوهرِ"
+            "هوو" -> "هوویِ"
+            "ربیب" -> "ربیبِ"
+            "ربیبه" -> "ربیبه‌ی"
+            "نتیجه" -> "نتیجه‌ی"
+            "نوه پسری", "نوه‌ی پسری" -> "نوه‌ی پسریِ"
+            "نوه دختری", "نوه‌ی دختری" -> "نوه‌ی دختریِ"
+            "پدربزرگ پدری" -> "پدربزرگِ پدریِ"
+            "مادربزرگ پدری" -> "مادربزرگِ پدریِ"
+            "پدربزرگ مادری" -> "پدربزرگِ مادریِ"
+            "مادربزرگ مادری" -> "مادربزرگِ مادریِ"
+            "جد پدری" -> "جدّ پدریِ"
+            "جده پدری" -> "جدّه پدریِ"
+            "جد مادری" -> "جدّ مادریِ"
+            "جده مادری" -> "جدّه مادریِ"
+            "عروس نتیجه" -> "عروسِ نتیجه‌ی"
+            "داماد نتیجه" -> "دامادِ نتیجه‌ی"
+            "جد اعلای همسر" -> "جد اعلایِ همسرِ"
+            "جده اعلای همسر" -> "جدّه اعلایِ همسرِ"
+            "زن برادر" -> "زن برادرِ"
+            "شوهر خواهر" -> "شوهر خواهرِ"
+            "زن عمو" -> "زن عمویِ"
+            "شوهر عمه" -> "شوهر عمه‌ی"
+            "زن دایی" -> "زن داییِ"
+            "شوهر خاله" -> "شوهر خاله‌ی"
+            "باجناق" -> "باجناقِ"
+            "جاری" -> "جاریِ"
+            "جد بزرگ" -> "جد بزرگِ"
+            "جده بزرگ" -> "جده بزرگِ"
+            "جد اعلا" -> "جد اعلایِ"
+            "جده اعلا" -> "جده اعلایِ"
+            "نبیره" -> "نبیره‌ی"
+            "ندیده" -> "ندیده‌ی"
+            "ناپدری" -> "ناپدریِ"
+            "نامادری" -> "نامادریِ"
+            "پدرخوانده" -> "پدرخوانده‌ی"
+            "مادرخوانده" -> "مادرخوانده‌ی"
+            "فرزندخوانده" -> "فرزندخوانده‌ی"
+            "پسرخوانده" -> "پسرخوانده‌ی"
+            "دخترخوانده" -> "دخترخوانده‌ی"
+            "پدربزرگ همسر", "پدر بزرگ همسر" -> "پدربزرگِ همسرِ"
+            "مادربزرگ همسر", "مادر بزرگ همسر" -> "مادربزرگِ همسرِ"
+            "عموی همسر" -> "عمویِ همسرِ"
+            "عمه همسر" -> "عمه‌ی همسرِ"
+            "دایی همسر" -> "داییِ همسرِ"
+            "خاله همسر" -> "خاله‌ی همسرِ"
+            "برادرزاده همسر" -> "برادرزاده‌ی همسرِ"
+            "خواهرزاده همسر" -> "خواهرزاده‌ی همسرِ"
+            "زن برادرزاده" -> "زن برادرزاده‌ی"
+            "شوهر برادرزاده" -> "شوهر برادرزاده‌ی"
+            "زن خواهرزاده" -> "زن خواهرزاده‌ی"
+            "شوهر خواهرزاده" -> "شوهر خواهرزاده‌ی"
+            "عموی پدر" -> "عمویِ پدرِ"
+            "عمه پدر" -> "عمه‌ی پدرِ"
+            "دایی پدر" -> "داییِ پدرِ"
+            "خاله پدر" -> "خاله‌ی پدرِ"
+            "عموی مادر" -> "عمویِ مادرِ"
+            "عمه مادر" -> "عمه‌ی مادرِ"
+            "دایی مادر" -> "داییِ مادرِ"
+            "خاله مادر" -> "خاله‌ی مادرِ"
+            "نوه‌ی برادر", "نوه برادر" -> "نوه‌ی برادرِ"
+            "نوه‌ی خواهر", "نوه خواهر" -> "نوه‌ی خواهرِ"
+            "عروس نبیره" -> "عروسِ نبیره‌ی"
+            "داماد نبیره" -> "دامادِ نبیره‌ی"
+            "پسر همسر" -> "پسرِ همسرِ"
+            "دختر همسر" -> "دخترِ همسرِ"
+            "نوه‌ی همسر", "نوه همسر" -> "نوه‌ی همسرِ"
+            "خویشاوند" -> "خویشاوندِ"
+            else -> {
+                when {
+                    clean.endsWith("ه") || clean.endsWith("ة") -> "${clean}‌ی"
+                    clean.endsWith("ا") || clean.endsWith("و") -> "${clean}یِ"
+                    clean.endsWith("ی") -> "${clean}ِ"
+                    else -> "${clean}ِ"
+                }
+            }
+        }
     }
 
     /**
