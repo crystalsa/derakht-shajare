@@ -171,6 +171,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
     var isRestoringSubtree by remember { mutableStateOf(false) }
     var showSubtreeBackupPerson by remember { mutableStateOf<Person?>(null) }
     var showSubtreeRestoreDialog by remember { mutableStateOf(false) }
+    var showCopySubtreeGroupPerson by remember { mutableStateOf<Person?>(null) }
     
     val onAddPersonTrigger = {
         if (allGroups.isEmpty()) {
@@ -1847,6 +1848,81 @@ $databaseError
                                                         color = textColor.copy(alpha = 0.6f)
                                                     )
                                                 }
+
+                                                // 3-dots menu for member
+                                                Box {
+                                                    var menuExpanded by remember { mutableStateOf(false) }
+                                                    IconButton(
+                                                        onClick = { menuExpanded = true },
+                                                        modifier = Modifier.size(32.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = TablerIcons.DotsVertical,
+                                                            contentDescription = "عملیات عضو",
+                                                            tint = Color.Gray,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+
+                                                    DropdownMenu(
+                                                        expanded = menuExpanded,
+                                                        onDismissRequest = { menuExpanded = false },
+                                                        shape = RoundedCornerShape(16.dp),
+                                                        containerColor = Color.White,
+                                                        tonalElevation = 8.dp,
+                                                        shadowElevation = 8.dp
+                                                    ) {
+                                                        DropdownMenuItem(
+                                                            text = { Text("مشاهده جزئیات") },
+                                                            leadingIcon = { Icon(TablerIcons.User, contentDescription = null, tint = accentColor) },
+                                                            onClick = {
+                                                                menuExpanded = false
+                                                                selectedPersonForDetails = person
+                                                            }
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("کپی در گروه فامیلی جدید") },
+                                                            leadingIcon = { Icon(TablerIcons.GitFork, contentDescription = null, tint = accentColor) },
+                                                            onClick = {
+                                                                menuExpanded = false
+                                                                showCopySubtreeGroupPerson = person
+                                                            }
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("ویرایش مشخصات") },
+                                                            leadingIcon = { Icon(TablerIcons.Pencil, contentDescription = null) },
+                                                            onClick = {
+                                                                menuExpanded = false
+                                                                personToEdit = person
+                                                            }
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("افزودن فرزند") },
+                                                            leadingIcon = { Icon(TablerIcons.Plus, contentDescription = null) },
+                                                            onClick = {
+                                                                menuExpanded = false
+                                                                personToSubMemberOf = person
+                                                            }
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("افزودن همسر") },
+                                                            leadingIcon = { Icon(TablerIcons.Heart, contentDescription = null) },
+                                                            onClick = {
+                                                                menuExpanded = false
+                                                                personToAddSpouseFor = person
+                                                            }
+                                                        )
+                                                        HorizontalDivider()
+                                                        DropdownMenuItem(
+                                                            text = { Text("حذف عضو", color = Color.Red) },
+                                                            leadingIcon = { Icon(TablerIcons.Trash, contentDescription = null, tint = Color.Red) },
+                                                            onClick = {
+                                                                menuExpanded = false
+                                                                personToDelete = person
+                                                            }
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -2103,6 +2179,7 @@ $databaseError
                 }
             },
             onBackupSubtree = { p -> showSubtreeBackupPerson = p },
+            onCopySubtreeToNewGroup = { p -> showCopySubtreeGroupPerson = p },
             onRestoreSubtree = { 
                 showSubtreeRestoreDialog = true
             },
@@ -3685,6 +3762,20 @@ $databaseError
                 }
             },
             containerColor = Color.White
+        )
+    }
+
+    if (showCopySubtreeGroupPerson != null) {
+        CopySubtreeToGroupDialog(
+            person = showCopySubtreeGroupPerson!!,
+            viewModel = viewModel,
+            textColor = textColor,
+            accentColor = accentColor,
+            onDismiss = { showCopySubtreeGroupPerson = null },
+            onSuccess = { _, _, _ ->
+                showCopySubtreeGroupPerson = null
+                selectedPersonForDetails = null
+            }
         )
     }
 

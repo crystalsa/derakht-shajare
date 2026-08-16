@@ -486,6 +486,7 @@ fun MemberDetailsDialog(
     onPhotoClick: (Person) -> Unit = {},
     onBackupSubtree: (Person) -> Unit = {},
     onRestoreSubtree: () -> Unit = {},
+    onCopySubtreeToNewGroup: (Person) -> Unit = {},
     viewModel: com.example.viewmodel.FamilyViewModel? = null
 ) {
     val dialogOrange = Color(0xFFF57C00)
@@ -707,6 +708,14 @@ fun MemberDetailsDialog(
                                     leadingIcon = { Icon(TablerIcons.Users, contentDescription = null, tint = dialogAccentOrange) }
                                 )
                             }
+                            DropdownMenuItem(
+                                text = { Text("کپی شخص و زیرمجموعه در گروه جدید", color = textColor) },
+                                onClick = {
+                                    showActionMenu = false
+                                    onCopySubtreeToNewGroup(person)
+                                },
+                                leadingIcon = { Icon(TablerIcons.GitFork, contentDescription = null, tint = dialogAccentOrange) }
+                            )
                             DropdownMenuItem(
                                 text = { Text("تهیه پشتیبان عضو و زیرمجموعه‌ها", color = textColor) },
                                 onClick = {

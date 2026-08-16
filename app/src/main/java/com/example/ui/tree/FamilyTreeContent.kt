@@ -539,7 +539,7 @@ fun computeTreeLayoutPositions(
             }
         }
         
-        val allChildren = spouseGroup.flatMap { childrenMap[it] ?: emptyList() }
+        val allChildren = fullGroupForLayout.flatMap { childrenMap[it] ?: emptyList() }
             .filter { visiblePersonSet.contains(it) }
             .distinct()
             .sorted()
@@ -559,13 +559,13 @@ fun computeTreeLayoutPositions(
             val fatherInVisible = fatherId != null && visiblePersonSet.contains(fatherId)
             val motherInVisible = motherId != null && visiblePersonSet.contains(motherId)
             
-            val fatherInSpouseGroup = fatherId != null && spouseGroup.contains(fatherId)
-            val motherInSpouseGroup = motherId != null && spouseGroup.contains(motherId)
+            val fatherInFullGroup = fatherId != null && fullGroupForLayout.contains(fatherId)
+            val motherInFullGroup = motherId != null && fullGroupForLayout.contains(motherId)
             
             val shouldDrawMain = if (fatherInVisible && motherInVisible) {
-                fatherInSpouseGroup
+                fatherInFullGroup
             } else {
-                fatherInSpouseGroup || motherInSpouseGroup
+                fatherInFullGroup || motherInFullGroup
             }
             
             if (shouldDrawMain) {

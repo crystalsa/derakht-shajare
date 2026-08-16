@@ -1673,10 +1673,11 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 collectedPersonIds.add(spouseId)
             }
             
-            // Find children of this person
+            // Find children of this person or any spouse
+            val parentIds = mutableSetOf(personId).apply { addAll(spouseIds) }
             val childIds = relationships.filter { rel ->
-                (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") && rel.personId1 == personId
-            }.map { it.personId2 }
+                (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") && parentIds.contains(rel.personId1)
+            }.map { it.personId2 }.distinct()
             
             for (childId in childIds) {
                 collectDescendants(childId)
@@ -1691,6 +1692,71 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         }
         
         return Pair(subtreePersons, subtreeRelationships)
+    }
+
+    fun copyPersonSubtreeToNewGroup(
+        rootPersonId: Long,
+        newGroupName: String,
+        targetFolderId: Long? = currentFolderId.value,
+        onComplete: (newGroupId: Long, memberCount: Int) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val repo = repository ?: return@launch
+            val (subtreePersons, subtreeRelationships) = getSubtreePersonsAndRelationships(rootPersonId)
+            if (subtreePersons.isEmpty()) return@launch
+
+            val rootPerson = subtreePersons.find { it.id == rootPersonId }
+            val finalGroupName = newGroupName.ifBlank {
+                "خاندان ${rootPerson?.fullName ?: "جدید"}"
+            }
+
+            val maxOrder = _allGroups.value.maxOfOrNull { it.displayOrder } ?: 0
+            val newGroupId = repo.insertGroup(
+                com.example.data.FamilyGroup(
+                    name = finalGroupName,
+                    description = "شاخه مشتق شده از ${rootPerson?.fullName ?: ""}",
+                    displayOrder = maxOrder + 1,
+                    folderId = targetFolderId
+                )
+            )
+
+            val oldToNewPersonIdMap = mutableMapOf<Long, Long>()
+            val rootGen = rootPerson?.generation ?: 0
+
+            for (p in subtreePersons) {
+                val adjustedGen = (p.generation - rootGen).coerceAtLeast(0)
+                val newPersonId = repo.insertPerson(
+                    p.copy(
+                        id = 0,
+                        groupId = newGroupId,
+                        generation = adjustedGen
+                    )
+                )
+                oldToNewPersonIdMap[p.id] = newPersonId
+            }
+
+            for (r in subtreeRelationships) {
+                // Ensure the root person never has parents in the new group (it is the root!)
+                if ((r.type == "Parent-Child" || r.type == "Adoptive-Parent-Child") && r.personId2 == rootPersonId) {
+                    continue
+                }
+                val newP1 = oldToNewPersonIdMap[r.personId1]
+                val newP2 = oldToNewPersonIdMap[r.personId2]
+                if (newP1 != null && newP2 != null) {
+                    repo.insertRelationship(
+                        r.copy(
+                            id = 0,
+                            personId1 = newP1,
+                            personId2 = newP2
+                        )
+                    )
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                onComplete(newGroupId, subtreePersons.size)
+            }
+        }
     }
 
     suspend fun exportSubtreeBackupToJson(rootPersonId: Long): String = withContext(Dispatchers.IO) {
