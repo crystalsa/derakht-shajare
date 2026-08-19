@@ -31,6 +31,11 @@ jobs:
       with:
         gradle-version: 9.3.1
 
+    - name: Setup Gradle Wrapper
+      run: |
+        gradle wrapper --gradle-version 9.3.1
+        chmod +x gradlew
+
     - name: Restore Debug Keystore
       run: |
         if [ -f debug.keystore ] && [ -s debug.keystore ]; then
@@ -51,22 +56,17 @@ jobs:
     - name: Configure Environment Variables
       run: cp .env.example .env
 
-    - name: Configure Gradle Properties for GitHub Actions
-      run: |
-        sed -i 's/kotlin.compiler.execution.strategy=in-process/kotlin.compiler.execution.strategy=daemon/g' gradle.properties
-
     - name: Build Debug APK
       env:
         DEBUG_KEYSTORE_PATH: ${{ secrets.DEBUG_KEYSTORE_PATH }}
         DEBUG_STORE_PASSWORD: ${{ secrets.DEBUG_STORE_PASSWORD }}
         DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
         DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-      run: gradle :app:assembleDebug -Pkotlin.compiler.execution.strategy=daemon --no-configuration-cache --stacktrace
+      run: ./gradlew :app:assembleDebug --no-daemon --no-configuration-cache --stacktrace
 
     - name: Prepare APK Files
       run: |
         cp app/build/outputs/apk/debug/app-debug.apk ./shajareh-nameh-debug.apk
-        cp app/build/outputs/apk/debug/app-debug.apk ./shajareh-nameh.apk
 
     - name: Upload Debug APK (Artifact)
       uses: actions/upload-artifact@v4
