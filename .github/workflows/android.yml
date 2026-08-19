@@ -5,7 +5,7 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Allows manual triggering from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
@@ -30,11 +30,6 @@ jobs:
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: 9.3.1
-
-    - name: Setup Gradle Wrapper
-      run: |
-        gradle wrapper --gradle-version 9.3.1
-        chmod +x gradlew
 
     - name: Restore Debug Keystore
       run: |
@@ -62,7 +57,8 @@ jobs:
         DEBUG_STORE_PASSWORD: ${{ secrets.DEBUG_STORE_PASSWORD }}
         DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
         DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-      run: ./gradlew :app:assembleDebug --no-daemon --no-configuration-cache --stacktrace
+      run: |
+        gradle :app:assembleDebug --stacktrace --no-daemon --no-configuration-cache
 
     - name: Prepare APK Files
       run: |
