@@ -25,18 +25,23 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+      val rawKeystorePath = System.getenv("KEYSTORE_PATH")
+      val keystorePath = if (!rawKeystorePath.isNullOrBlank()) rawKeystorePath else "${rootDir}/my-upload-key.jks"
       storeFile = file(keystorePath)
       storePassword = System.getenv("STORE_PASSWORD")
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
     create("debugConfig") {
-      val debugKeystorePath = System.getenv("DEBUG_KEYSTORE_PATH") ?: "${rootDir}/debug.keystore"
+      val rawDebugKeystorePath = System.getenv("DEBUG_KEYSTORE_PATH")
+      val debugKeystorePath = if (!rawDebugKeystorePath.isNullOrBlank()) rawDebugKeystorePath else "${rootDir}/debug.keystore"
       storeFile = file(debugKeystorePath)
-      storePassword = System.getenv("DEBUG_STORE_PASSWORD") ?: "android"
-      keyAlias = System.getenv("DEBUG_KEY_ALIAS") ?: "androiddebugkey"
-      keyPassword = System.getenv("DEBUG_KEY_PASSWORD") ?: "android"
+      val storePass = System.getenv("DEBUG_STORE_PASSWORD")
+      storePassword = if (!storePass.isNullOrBlank()) storePass else "android"
+      val alias = System.getenv("DEBUG_KEY_ALIAS")
+      keyAlias = if (!alias.isNullOrBlank()) alias else "androiddebugkey"
+      val keyPass = System.getenv("DEBUG_KEY_PASSWORD")
+      keyPassword = if (!keyPass.isNullOrBlank()) keyPass else "android"
     }
   }
 
