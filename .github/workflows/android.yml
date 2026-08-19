@@ -51,6 +51,11 @@ jobs:
     - name: Configure Environment Variables
       run: cp .env.example .env
 
+    - name: Configure Gradle Properties for GitHub Actions
+      run: |
+        sed -i 's/kotlin.compiler.execution.strategy=in-process/kotlin.compiler.execution.strategy=daemon/g' gradle.properties || true
+        echo "org.gradle.daemon=false" >> gradle.properties
+
     - name: Build Debug APK
       env:
         DEBUG_KEYSTORE_PATH: ${{ secrets.DEBUG_KEYSTORE_PATH }}
@@ -58,7 +63,7 @@ jobs:
         DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
         DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
       run: |
-        gradle :app:assembleDebug --stacktrace --no-daemon --no-configuration-cache
+        gradle :app:assembleDebug --no-daemon --stacktrace
 
     - name: Prepare APK Files
       run: |
