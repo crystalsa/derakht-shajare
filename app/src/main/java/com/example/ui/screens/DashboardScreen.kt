@@ -372,15 +372,24 @@ $databaseError
         Scaffold(
             floatingActionButtonPosition = FabPosition.Center,
             topBar = {
-            TopAppBar(
-                title = { 
+            Surface(
+                color = bgColor,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         "شجره‌نامه خانوادگی", 
                         fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
                         color = textColor
                     ) 
-                },
-                actions = {
                     var showSettingsMenu by remember { mutableStateOf(false) }
                     Box {
                         IconButton(
@@ -474,11 +483,8 @@ $databaseError
                             )
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = bgColor
-                )
-            )
+                }
+            }
         },
         bottomBar = {
             NavigationBar(
@@ -643,7 +649,7 @@ $databaseError
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 12.dp, vertical = 0.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -663,7 +669,7 @@ $databaseError
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 0.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
@@ -943,8 +949,8 @@ $databaseError
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(scrollState)
-                                .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                                .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // Beautiful welcoming and group status header
                             val selectedGroupName = remember(allGroups, selectedGroupId) {
@@ -1997,7 +2003,9 @@ $databaseError
                             relationships = relationships,
                             textColor = textColor,
                             onClear = { viewModel.clearHighlighting() },
-                            modifier = Modifier.align(Alignment.TopCenter)
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 20.dp)
                         )
                     }
                 }
@@ -2009,7 +2017,7 @@ $databaseError
                     contentColor = Color.White,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(24.dp)
+                        .padding(bottom = 39.dp, end = 24.dp)
                         .testTag("close_full_tree_button")
                 ) {
                     Row(
@@ -2037,7 +2045,7 @@ $databaseError
                         contentColor = Color.White,
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(24.dp)
+                            .padding(bottom = 39.dp, start = 24.dp)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -4405,7 +4413,7 @@ private fun RelationshipHighlightBanner(
     Card(
         modifier = modifier
             .fillMaxWidth(0.92f)
-            .padding(top = 10.dp, bottom = 6.dp),
+            .padding(bottom = 6.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),

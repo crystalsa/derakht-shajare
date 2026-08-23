@@ -68,17 +68,28 @@ object RelationshipCalculator {
         // Build adjacency map: PersonId -> List of Pair<NeighborPersonId, DirectedRelType>
         val adjList = mutableMapOf<Long, MutableList<Pair<Long, String>>>()
         for (rel in allRelationships) {
-            val p1 = personMap[rel.personId1]
-            val p2 = personMap[rel.personId2]
-            if (p1 != null && p2 != null) {
-                val dir1To2 = getDirectedRelation(p1, p2, allRelationships)
-                if (dir1To2 != null) {
-                    adjList.getOrPut(p1.id) { mutableListOf() }.add(Pair(p2.id, dir1To2))
-                }
-                val dir2To1 = getDirectedRelation(p2, p1, allRelationships)
-                if (dir2To1 != null) {
-                    adjList.getOrPut(p2.id) { mutableListOf() }.add(Pair(p1.id, dir2To1))
-                }
+            val p1 = personMap[rel.personId1] ?: continue
+            val p2 = personMap[rel.personId2] ?: continue
+
+            val (dir1To2, dir2To1) = when (rel.type) {
+                "Spouse", "SecondSpouse" -> Pair("SPOUSE", "SPOUSE")
+                "Divorced", "SecondSpouse_Divorced" -> Pair("EX_SPOUSE", "EX_SPOUSE")
+                "Parent-Child" -> Pair(
+                    if (p2.gender == "Male") "SON" else "DAUGHTER",
+                    if (p1.gender == "Male") "FATHER" else "MOTHER"
+                )
+                "Adoptive-Parent-Child" -> Pair(
+                    if (p2.gender == "Male") "ADOPTIVE_SON" else "ADOPTIVE_DAUGHTER",
+                    if (p1.gender == "Male") "ADOPTIVE_FATHER" else "ADOPTIVE_MOTHER"
+                )
+                else -> Pair(null, null)
+            }
+
+            if (dir1To2 != null) {
+                adjList.getOrPut(p1.id) { mutableListOf() }.add(Pair(p2.id, dir1To2))
+            }
+            if (dir2To1 != null) {
+                adjList.getOrPut(p2.id) { mutableListOf() }.add(Pair(p1.id, dir2To1))
             }
         }
 
@@ -168,7 +179,7 @@ object RelationshipCalculator {
         if (clean.endsWith(" همسر") || clean.endsWith(" نوه") || clean.endsWith(" برادر") || clean.endsWith(" خواهر") || clean.endsWith(" پدر") || clean.endsWith(" مادر")) {
             return true
         }
-        return true
+        return false
     }
 
     /**

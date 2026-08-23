@@ -17,11 +17,20 @@ abstract class FamilyDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: FamilyDatabase? = null
 
-        fun closeAndClearInstance() {
+        fun checkpointAndClose() {
             synchronized(this) {
+                try {
+                    INSTANCE?.openHelper?.writableDatabase?.query("PRAGMA wal_checkpoint(FULL)")?.close()
+                } catch (e: Exception) {
+                    Log.e("FamilyDatabase", "Error executing wal_checkpoint", e)
+                }
                 INSTANCE?.close()
                 INSTANCE = null
             }
+        }
+
+        fun closeAndClearInstance() {
+            checkpointAndClose()
         }
 
         val MIGRATION_1_2 = object : Migration(1, 2) {

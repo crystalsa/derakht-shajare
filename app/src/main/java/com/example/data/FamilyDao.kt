@@ -14,6 +14,9 @@ interface FamilyDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPerson(person: Person): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPersons(persons: List<Person>): List<Long>
+
     @Update
     suspend fun updatePerson(person: Person)
 
@@ -25,6 +28,9 @@ interface FamilyDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRelationship(relationship: Relationship): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRelationships(relationships: List<Relationship>): List<Long>
 
     @Delete
     suspend fun deleteRelationship(relationship: Relationship)
@@ -42,6 +48,9 @@ interface FamilyDao {
     @Update
     suspend fun updateGroup(group: FamilyGroup)
 
+    @Update
+    suspend fun updateGroups(groups: List<FamilyGroup>)
+
     @Delete
     suspend fun deleteGroup(group: FamilyGroup)
 
@@ -54,6 +63,9 @@ interface FamilyDao {
 
     @Update
     suspend fun updateFolder(folder: FamilyFolder)
+
+    @Update
+    suspend fun updateFolders(folders: List<FamilyFolder>)
 
     @Delete
     suspend fun deleteFolder(folder: FamilyFolder)

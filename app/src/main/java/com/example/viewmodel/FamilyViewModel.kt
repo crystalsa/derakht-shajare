@@ -15,9 +15,12 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
-class FamilyViewModel(application: Application) : AndroidViewModel(application) {
+class FamilyViewModel @JvmOverloads constructor(
+    application: Application,
+    customRepository: FamilyRepository? = null
+) : AndroidViewModel(application) {
 
-    private var repository: FamilyRepository? = null
+    private var repository: FamilyRepository? = customRepository
     private var collectJob: kotlinx.coroutines.Job? = null
     
     private val _allPersons = MutableStateFlow<List<Person>>(emptyList())
@@ -158,82 +161,90 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     val filteredPersons: StateFlow<List<Person>> = combine(
         allPersons, allRelationships, filterState
     ) { persons, relationships, state ->
-        val query = state.query
-        val gender = state.gender
-        val residence = state.residence
-        val isDeceased = state.isDeceased
-        val groupId = state.groupId
+        withContext(Dispatchers.Default) {
+            val query = state.query
+            val gender = state.gender
+            val residence = state.residence
+            val isDeceased = state.isDeceased
+            val groupId = state.groupId
 
-        val visibleIds = mutableSetOf<Long>()
-        android.util.Log.d("FamilyViewModel", "filteredPersons: persons.size=${persons.size}, groupId=$groupId, relationships.size=${relationships.size}")
-        if (groupId != null) {
-            val baseGroupPersons = persons.filter { it.groupId == groupId }
-            android.util.Log.d("FamilyViewModel", "filteredPersons: baseGroupPersons.size=${baseGroupPersons.size}")
-            val queue: Queue<Long> = LinkedList()
-            baseGroupPersons.forEach { 
-                visibleIds.add(it.id)
-                queue.add(it.id)
-            }
+            val visibleIds = mutableSetOf<Long>()
+            if (groupId != null) {
+                val baseGroupPersons = persons.filter { it.groupId == groupId }
+                val queue: Queue<Long> = LinkedList()
+                baseGroupPersons.forEach { 
+                    visibleIds.add(it.id)
+                    queue.add(it.id)
+                }
 
-            // Create spouses and children maps
-            val spousesMap = mutableMapOf<Long, MutableSet<Long>>()
-            val childrenMap = mutableMapOf<Long, MutableSet<Long>>()
+                // Create spouses, children, and parents maps for complete bidirectional tree traversal
+                val spousesMap = mutableMapOf<Long, MutableSet<Long>>()
+                val childrenMap = mutableMapOf<Long, MutableSet<Long>>()
+                val parentsMap = mutableMapOf<Long, MutableSet<Long>>()
 
-            relationships.forEach { rel ->
-                when (rel.type) {
-                    "Spouse", "Divorced", "SecondSpouse", "SecondSpouse_Divorced" -> {
-                        spousesMap.getOrPut(rel.personId1) { mutableSetOf() }.add(rel.personId2)
-                        spousesMap.getOrPut(rel.personId2) { mutableSetOf() }.add(rel.personId1)
-                    }
-                    "Parent-Child", "Adoptive-Parent-Child" -> {
-                        // personId1 is parent, personId2 is child
-                        childrenMap.getOrPut(rel.personId1) { mutableSetOf() }.add(rel.personId2)
+                relationships.forEach { rel ->
+                    when (rel.type) {
+                        "Spouse", "Divorced", "SecondSpouse", "SecondSpouse_Divorced" -> {
+                            spousesMap.getOrPut(rel.personId1) { mutableSetOf() }.add(rel.personId2)
+                            spousesMap.getOrPut(rel.personId2) { mutableSetOf() }.add(rel.personId1)
+                        }
+                        "Parent-Child", "Adoptive-Parent-Child" -> {
+                            // personId1 is parent, personId2 is child
+                            childrenMap.getOrPut(rel.personId1) { mutableSetOf() }.add(rel.personId2)
+                            parentsMap.getOrPut(rel.personId2) { mutableSetOf() }.add(rel.personId1)
+                        }
                     }
                 }
+
+                while (queue.isNotEmpty()) {
+                    val curr = queue.poll() ?: continue
+                    
+                    // Add spouses
+                    spousesMap[curr]?.forEach { spouseId ->
+                        if (visibleIds.add(spouseId)) {
+                            queue.add(spouseId)
+                        }
+                    }
+                    
+                    // Add children (downward search)
+                    childrenMap[curr]?.forEach { childId ->
+                        if (visibleIds.add(childId)) {
+                            queue.add(childId)
+                        }
+                    }
+
+                    // Add parents (upward search / ancestors)
+                    parentsMap[curr]?.forEach { parentId ->
+                        if (visibleIds.add(parentId)) {
+                            queue.add(parentId)
+                        }
+                    }
+                }
+            } else {
+                // When no group is selected (e.g. folder is empty), visibleIds remains empty
             }
 
-            while (queue.isNotEmpty()) {
-                val curr = queue.poll() ?: continue
+            val result = persons.filter { person ->
+                val matchesGroup = visibleIds.contains(person.id)
+
+                val matchesQuery = query.isEmpty() || 
+                    person.fullName.contains(query, ignoreCase = true) ||
+                    (person.occupation?.contains(query, ignoreCase = true) ?: false) ||
+                    (person.biography?.contains(query, ignoreCase = true) ?: false)
                 
-                // Add spouses
-                spousesMap[curr]?.forEach { spouseId ->
-                    if (visibleIds.add(spouseId)) {
-                        queue.add(spouseId)
-                    }
-                }
+                val matchesGender = gender == null || person.gender == gender
                 
-                // Add children (downward search only)
-                childrenMap[curr]?.forEach { childId ->
-                    if (visibleIds.add(childId)) {
-                        queue.add(childId)
-                    }
-                }
+                val matchesResidence = residence.isEmpty() ||
+                    (person.birthPlace?.contains(residence, ignoreCase = true) ?: false) ||
+                    (person.deathPlace?.contains(residence, ignoreCase = true) ?: false)
+                    
+                val matchesDeceased = isDeceased == null || person.isDeceased == isDeceased
+
+                matchesGroup && matchesQuery && matchesGender && matchesResidence && matchesDeceased
             }
-        } else {
-            // When no group is selected (e.g. folder is empty), visibleIds remains empty
+            result
         }
-
-        val result = persons.filter { person ->
-            val matchesGroup = visibleIds.contains(person.id)
-
-            val matchesQuery = query.isEmpty() || 
-                person.fullName.contains(query, ignoreCase = true) ||
-                (person.occupation?.contains(query, ignoreCase = true) ?: false) ||
-                (person.biography?.contains(query, ignoreCase = true) ?: false)
-            
-            val matchesGender = gender == null || person.gender == gender
-            
-            val matchesResidence = residence.isEmpty() ||
-                (person.birthPlace?.contains(residence, ignoreCase = true) ?: false) ||
-                (person.deathPlace?.contains(residence, ignoreCase = true) ?: false)
-                
-            val matchesDeceased = isDeceased == null || person.isDeceased == isDeceased
-
-            matchesGroup && matchesQuery && matchesGender && matchesResidence && matchesDeceased
-        }
-        android.util.Log.d("FamilyViewModel", "filteredPersons: result.size=${result.size}")
-        result
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun getPersonsInGroup(groupId: Long): List<Person> {
         val persons = _allPersons.value
@@ -248,6 +259,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
 
         val spousesMap = mutableMapOf<Long, MutableSet<Long>>()
         val childrenMap = mutableMapOf<Long, MutableSet<Long>>()
+        val parentsMap = mutableMapOf<Long, MutableSet<Long>>()
 
         relationships.forEach { rel ->
             when (rel.type) {
@@ -257,6 +269,7 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 "Parent-Child", "Adoptive-Parent-Child" -> {
                     childrenMap.getOrPut(rel.personId1) { mutableSetOf() }.add(rel.personId2)
+                    parentsMap.getOrPut(rel.personId2) { mutableSetOf() }.add(rel.personId1)
                 }
             }
         }
@@ -271,6 +284,11 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
             childrenMap[curr]?.forEach { childId ->
                 if (visibleIds.add(childId)) {
                     queue.add(childId)
+                }
+            }
+            parentsMap[curr]?.forEach { parentId ->
+                if (visibleIds.add(parentId)) {
+                    queue.add(parentId)
                 }
             }
         }
@@ -397,11 +415,12 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateGroupOrder(orderedGroups: List<com.example.data.FamilyGroup>) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val repo = repository ?: return@launch
-            orderedGroups.forEachIndexed { index, group ->
-                repo.updateGroup(group.copy(displayOrder = index))
+            val updated = orderedGroups.mapIndexed { index, group ->
+                group.copy(displayOrder = index)
             }
+            repo.updateGroups(updated)
         }
     }
 
@@ -441,6 +460,16 @@ class FamilyViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val repo = repository ?: return@launch
             repo.updateFolder(folder)
+        }
+    }
+
+    fun updateFolderOrder(orderedFolders: List<com.example.data.FamilyFolder>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val repo = repository ?: return@launch
+            val updated = orderedFolders.mapIndexed { index, folder ->
+                folder.copy(displayOrder = index)
+            }
+            repo.updateFolders(updated)
         }
     }
 

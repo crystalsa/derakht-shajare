@@ -12,6 +12,8 @@ class FamilyRepository(private val familyDao: FamilyDao) {
 
     suspend fun insertPerson(person: Person): Long = familyDao.insertPerson(person)
 
+    suspend fun insertPersons(persons: List<Person>): List<Long> = familyDao.insertPersons(persons)
+
     suspend fun updatePerson(person: Person) = familyDao.updatePerson(person)
 
     suspend fun deletePerson(person: Person) {
@@ -24,12 +26,17 @@ class FamilyRepository(private val familyDao: FamilyDao) {
     suspend fun insertRelationship(relationship: Relationship): Long =
         familyDao.insertRelationship(relationship)
 
+    suspend fun insertRelationships(relationships: List<Relationship>): List<Long> =
+        familyDao.insertRelationships(relationships)
+
     suspend fun deleteRelationship(relationship: Relationship) =
         familyDao.deleteRelationship(relationship)
 
     suspend fun insertGroup(group: FamilyGroup): Long = familyDao.insertGroup(group)
 
     suspend fun updateGroup(group: FamilyGroup) = familyDao.updateGroup(group)
+
+    suspend fun updateGroups(groups: List<FamilyGroup>) = familyDao.updateGroups(groups)
 
     suspend fun deleteGroup(group: FamilyGroup) {
         familyDao.deleteRelationshipsForGroup(group.id)
@@ -40,6 +47,8 @@ class FamilyRepository(private val familyDao: FamilyDao) {
     suspend fun insertFolder(folder: FamilyFolder): Long = familyDao.insertFolder(folder)
 
     suspend fun updateFolder(folder: FamilyFolder) = familyDao.updateFolder(folder)
+
+    suspend fun updateFolders(folders: List<FamilyFolder>) = familyDao.updateFolders(folders)
 
     suspend fun deleteFolder(folder: FamilyFolder) = familyDao.deleteFolder(folder)
 
