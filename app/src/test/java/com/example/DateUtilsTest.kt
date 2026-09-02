@@ -4,11 +4,22 @@ import com.example.ui.screens.calculateAge
 import com.example.ui.screens.formatLifeDates
 import com.example.ui.screens.formatLifeYearsOnlyLTR
 import com.example.ui.screens.getCurrentJalaliYear
+import com.example.ui.screens.jalaliToGregorianCal
 import com.example.ui.screens.validateBirthAndDeathDates
 import org.junit.Assert.*
 import org.junit.Test
+import java.util.Calendar
 
 class DateUtilsTest {
+
+    @Test
+    fun testJalaliToGregorianCal() {
+        // 1403/01/01 Jalali corresponds to March 20, 2024 Gregorian
+        val cal = jalaliToGregorianCal(1403, 1, 1)
+        assertEquals(2024, cal.get(Calendar.YEAR))
+        assertEquals(Calendar.MARCH, cal.get(Calendar.MONTH))
+        assertEquals(20, cal.get(Calendar.DAY_OF_MONTH))
+    }
 
     @Test
     fun testGetCurrentJalaliYear_validRange() {

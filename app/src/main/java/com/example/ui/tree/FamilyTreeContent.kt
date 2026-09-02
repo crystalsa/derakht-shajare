@@ -111,14 +111,16 @@ fun FamilyTreeContent(
         val widthPx = constraints.maxWidth.toFloat()
         val heightPx = constraints.maxHeight.toFloat()
 
+        // Visible bounds in coordinates relative to screen center (same coordinate system as pos.x * density, pos.y * density)
         val visibleBounds = remember(scale, panOffset, widthPx, heightPx, density) {
             if (widthPx <= 0f || heightPx <= 0f) null
             else {
-                val marginPx = 300f * density
-                val minX = (-panOffset.x - widthPx / 2f) / scale - marginPx
-                val maxX = (widthPx / 2f - panOffset.x) / scale + marginPx
-                val minY = (-panOffset.y - heightPx / 2f) / scale - marginPx
-                val maxY = (heightPx / 2f - panOffset.y) / scale + marginPx
+                val marginPx = 350f * density
+                val safeScale = if (scale > 0.05f) scale else 1f
+                val minX = (-panOffset.x - widthPx / 2f) / safeScale - marginPx
+                val maxX = (-panOffset.x + widthPx / 2f) / safeScale + marginPx
+                val minY = (-panOffset.y - heightPx / 2f) / safeScale - marginPx
+                val maxY = (-panOffset.y + heightPx / 2f) / safeScale + marginPx
                 Rect(minX, minY, maxX, maxY)
             }
         }

@@ -7,6 +7,8 @@ import com.example.data.FamilyDatabase
 import com.example.data.FamilyRepository
 import com.example.data.Person
 import com.example.data.Relationship
+import com.example.ui.screens.getCurrentJalaliYear
+import com.example.ui.screens.jalaliToGregorianCal
 import com.example.utils.RelationshipCalculator
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -1000,23 +1002,58 @@ class FamilyViewModel @JvmOverloads constructor(
         allPersons, allRelationships
     ) { persons, relationships ->
         val events = mutableListOf<FamilyEvent>()
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val today = Calendar.getInstance()
-        val currentYear = today.get(Calendar.YEAR)
+        today.set(Calendar.HOUR_OF_DAY, 0)
+        today.set(Calendar.MINUTE, 0)
+        today.set(Calendar.SECOND, 0)
+        today.set(Calendar.MILLISECOND, 0)
 
-        val personMap = persons.associateBy { it.id }
+        val currentJalaliYear = getCurrentJalaliYear()
 
         for (p in persons) {
-            val birthCal = parseDateCal(p.birthDate)
-            if (birthCal != null) {
-                // Birthday event
-                birthCal.set(Calendar.YEAR, currentYear)
-                if (birthCal.before(today)) {
-                    birthCal.add(Calendar.YEAR, 1)
+            val birthParts = parseDateParts(p.birthDate)
+            if (birthParts != null && birthParts.size >= 3) {
+                val bYear = birthParts[0]
+                val bMonth = birthParts[1]
+                val bDay = birthParts[2]
+
+                // Event in current Jalali year
+                val eventCalThisYear = if (bYear < 1600) {
+                    jalaliToGregorianCal(currentJalaliYear, bMonth, bDay)
+                } else {
+                    Calendar.getInstance().apply {
+                        set(Calendar.YEAR, today.get(Calendar.YEAR))
+                        set(Calendar.MONTH, bMonth - 1)
+                        set(Calendar.DAY_OF_MONTH, bDay)
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
                 }
-                val daysRemaining = daysBetween(today, birthCal)
-                val age = currentYear - (extractYear(p.birthDate) ?: currentYear)
-                
+
+                val targetCal = if (eventCalThisYear.before(today)) {
+                    // Next occurrence is next year
+                    if (bYear < 1600) {
+                        jalaliToGregorianCal(currentJalaliYear + 1, bMonth, bDay)
+                    } else {
+                        Calendar.getInstance().apply {
+                            set(Calendar.YEAR, today.get(Calendar.YEAR) + 1)
+                            set(Calendar.MONTH, bMonth - 1)
+                            set(Calendar.DAY_OF_MONTH, bDay)
+                            set(Calendar.HOUR_OF_DAY, 0)
+                            set(Calendar.MINUTE, 0)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }
+                    }
+                } else {
+                    eventCalThisYear
+                }
+
+                val daysRemaining = daysBetween(today, targetCal)
+                val age = currentJalaliYear - bYear
+
                 if (daysRemaining in 0..30) {
                     events.add(
                         FamilyEvent(
@@ -1032,15 +1069,46 @@ class FamilyViewModel @JvmOverloads constructor(
             }
 
             if (p.isDeceased) {
-                val deathCal = parseDateCal(p.deathDate)
-                if (deathCal != null) {
-                    // Death anniversary
-                    deathCal.set(Calendar.YEAR, currentYear)
-                    if (deathCal.before(today)) {
-                        deathCal.add(Calendar.YEAR, 1)
+                val deathParts = parseDateParts(p.deathDate)
+                if (deathParts != null && deathParts.size >= 3) {
+                    val dYear = deathParts[0]
+                    val dMonth = deathParts[1]
+                    val dDay = deathParts[2]
+
+                    val eventCalThisYear = if (dYear < 1600) {
+                        jalaliToGregorianCal(currentJalaliYear, dMonth, dDay)
+                    } else {
+                        Calendar.getInstance().apply {
+                            set(Calendar.YEAR, today.get(Calendar.YEAR))
+                            set(Calendar.MONTH, dMonth - 1)
+                            set(Calendar.DAY_OF_MONTH, dDay)
+                            set(Calendar.HOUR_OF_DAY, 0)
+                            set(Calendar.MINUTE, 0)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }
                     }
-                    val daysRemaining = daysBetween(today, deathCal)
-                    val yearsPassed = currentYear - (extractYear(p.deathDate) ?: currentYear)
+
+                    val targetCal = if (eventCalThisYear.before(today)) {
+                        if (dYear < 1600) {
+                            jalaliToGregorianCal(currentJalaliYear + 1, dMonth, dDay)
+                        } else {
+                            Calendar.getInstance().apply {
+                                set(Calendar.YEAR, today.get(Calendar.YEAR) + 1)
+                                set(Calendar.MONTH, dMonth - 1)
+                                set(Calendar.DAY_OF_MONTH, dDay)
+                                set(Calendar.HOUR_OF_DAY, 0)
+                                set(Calendar.MINUTE, 0)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }
+                        }
+                    } else {
+                        eventCalThisYear
+                    }
+
+                    val daysRemaining = daysBetween(today, targetCal)
+                    val yearsPassed = currentJalaliYear - dYear
                     if (daysRemaining in 0..30) {
                         events.add(
                             FamilyEvent(
@@ -1057,28 +1125,24 @@ class FamilyViewModel @JvmOverloads constructor(
             }
         }
 
-        // Marriages (Spouses)
-        for (rel in relationships) {
-            if (rel.type == "Spouse" || rel.type == "SecondSpouse") {
-                val p1 = personMap[rel.personId1]
-                val p2 = personMap[rel.personId2]
-                if (p1 != null && p2 != null) {
-                    // Let's assume a dummy or calculated wedding date or anniversary based on first child's birth minus 1 year
-                    // Or since we don't have explicit wedding date, we can generate a wedding anniversary dynamically from first child birth
-                    // Or we can assume marriages are celebrated. Since we don't have explicit date in relationships, we can search if there's any custom wedding date
-                    // Let's add wedding reminders if the user sets them, or simulate. Let's look for first child's birthday as a source or just default to relationship anniversary
-                    // Let's check: can we just add custom anniversaries? Yes! To make it functional, let's create a placeholder or base it on p1/p2.
-                }
-            }
-        }
-
         events.sortedBy { it.daysRemaining }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private fun parseDateParts(dateString: String?): List<Int>? {
+        if (dateString.isNullOrEmpty()) return null
+        return try {
+            val parts = dateString.split("-", "/")
+            val ints = parts.mapNotNull { it.toIntOrNull() }
+            if (ints.isNotEmpty()) ints else null
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     private fun extractYear(dateString: String?): Int? {
         if (dateString.isNullOrEmpty()) return null
         return try {
-            val parts = dateString.split("-")
+            val parts = dateString.split("-", "/")
             if (parts.isNotEmpty()) parts[0].toIntOrNull() else null
         } catch (e: Exception) {
             null
@@ -1086,37 +1150,16 @@ class FamilyViewModel @JvmOverloads constructor(
     }
 
     private fun getCurrentYearFor(birthYear: Int): Int {
-        val gregorianYear = Calendar.getInstance().get(Calendar.YEAR)
         return if (birthYear < 1600) {
-            // It is a Jalali year.
-            val month = Calendar.getInstance().get(Calendar.MONTH) // 0-indexed (0 is Jan, 2 is Mar)
-            val day = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-            if (month < 2 || (month == 2 && day < 21)) {
-                gregorianYear - 622
-            } else {
-                gregorianYear - 621
-            }
+            getCurrentJalaliYear()
         } else {
-            gregorianYear
-        }
-    }
-
-    private fun parseDateCal(dateString: String?): Calendar? {
-        if (dateString.isNullOrEmpty()) return null
-        return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            val date = sdf.parse(dateString) ?: return null
-            val cal = Calendar.getInstance()
-            cal.time = date
-            cal
-        } catch (e: Exception) {
-            null
+            Calendar.getInstance().get(Calendar.YEAR)
         }
     }
 
     private fun daysBetween(cal1: Calendar, cal2: Calendar): Int {
         val diff = cal2.timeInMillis - cal1.timeInMillis
-        return (diff / (24 * 60 * 60 * 1000)).toInt()
+        return kotlin.math.max(0, (diff / (24 * 60 * 60 * 1000)).toInt())
     }
 
     private fun getBase64Image(filePath: String): String? {

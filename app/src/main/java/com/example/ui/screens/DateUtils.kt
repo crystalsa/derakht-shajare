@@ -37,6 +37,70 @@ fun getCurrentJalaliYear(): Int {
     return jy
 }
 
+/**
+ * Converts a Jalali date (year, month: 1-12, day: 1-31) to a Gregorian Calendar instance.
+ */
+fun jalaliToGregorianCal(jy: Int, jm: Int, jd: Int): Calendar {
+    val jDaysInMonth = intArrayOf(31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29)
+    val gDaysInMonth = intArrayOf(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+    val jy2 = jy - 979
+    val jm2 = jm - 1
+    val jd2 = jd - 1
+
+    var jDayNo = 365 * jy2 + (jy2 / 33) * 8 + ((jy2 % 33 + 3) / 4)
+    for (i in 0 until jm2) {
+        jDayNo += jDaysInMonth[i]
+    }
+    jDayNo += jd2
+
+    var gDayNo = jDayNo + 79
+    var gy = 1600 + 400 * (gDayNo / 146097)
+    gDayNo %= 146097
+
+    var leap = true
+    if (gDayNo >= 36525) {
+        gDayNo--
+        gy += 100 * (gDayNo / 36524)
+        gDayNo %= 36524
+
+        if (gDayNo >= 365) {
+            gDayNo++
+        } else {
+            leap = false
+        }
+    }
+
+    gy += 4 * (gDayNo / 1461)
+    gDayNo %= 1461
+
+    if (gDayNo >= 366) {
+        leap = false
+        gDayNo--
+        gy += gDayNo / 365
+        gDayNo %= 365
+    }
+
+    var gm = 0
+    while (gm < 12) {
+        val dim = if (gm == 1 && leap) 29 else gDaysInMonth[gm]
+        if (gDayNo < dim) break
+        gDayNo -= dim
+        gm++
+    }
+    val gd = gDayNo + 1
+
+    val cal = Calendar.getInstance()
+    cal.set(Calendar.YEAR, gy)
+    cal.set(Calendar.MONTH, gm)
+    cal.set(Calendar.DAY_OF_MONTH, gd)
+    cal.set(Calendar.HOUR_OF_DAY, 0)
+    cal.set(Calendar.MINUTE, 0)
+    cal.set(Calendar.SECOND, 0)
+    cal.set(Calendar.MILLISECOND, 0)
+    return cal
+}
+
 
 fun validateBirthAndDeathDates(birthDate: String?, deathDate: String?): Boolean {
     if (birthDate.isNullOrBlank() || deathDate.isNullOrBlank()) return true
