@@ -77,6 +77,8 @@ fun FamilyMemberNodeCard(
         .let { modifier ->
             if (isGlow) {
                 modifier.shadow(elevation = 16.dp, shape = RoundedCornerShape(18.dp))
+            } else if (isHighlighted) {
+                modifier.shadow(elevation = 12.dp, shape = RoundedCornerShape(18.dp))
             } else {
                 modifier
             }

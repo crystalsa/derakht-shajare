@@ -111,6 +111,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.Person
 import com.example.data.Relationship
+import com.example.utils.FamilyReportHelper
 import com.example.utils.RelationshipCalculator
 import com.example.viewmodel.FamilyEvent
 import com.example.viewmodel.FamilyViewModel
@@ -3934,15 +3935,14 @@ $databaseError
                     if (pos.y > maxY) maxY = pos.y
                 }
 
-                val maxAbsX = maxOf(kotlin.math.abs(minX), kotlin.math.abs(maxX))
-                val maxAbsY = maxOf(kotlin.math.abs(minY), kotlin.math.abs(maxY))
-                val widthDp = 2f * maxAbsX + 340f
-                val heightDp = 2f * maxAbsY + 380f
-                val maxSpanDp = maxOf(widthDp, heightDp)
+                // Node card is 160dp wide and ~190dp high (with 8dp outer padding)
+                val treeContentWidthDp = (maxX - minX) + 180f
+                val treeContentHeightDp = (maxY - minY) + 210f
 
-                val targetMaxPx = 2400f
+                val maxSpanDp = maxOf(treeContentWidthDp, treeContentHeightDp)
+                val targetMaxPx = 2800f
                 val calculatedDensity = targetMaxPx / maxSpanDp
-                minOf(density, calculatedDensity).coerceIn(0.5f, 2.0f)
+                minOf(density, calculatedDensity).coerceIn(0.6f, 2.0f)
             }
         }
 
@@ -3962,12 +3962,19 @@ $databaseError
                     if (pos.y > maxY) maxY = pos.y
                 }
 
+                // Since positions are centered around (0,0), tree extends from -maxAbsX to +maxAbsX
+                // plus half-card dimension on each side.
                 val maxAbsX = maxOf(kotlin.math.abs(minX), kotlin.math.abs(maxX))
                 val maxAbsY = maxOf(kotlin.math.abs(minY), kotlin.math.abs(maxY))
 
-                val widthDp = (2f * maxAbsX + 340f).dp
-                val heightDp = (2f * maxAbsY + 380f).dp
-                widthDp to heightDp
+                // Bounding box of the tree content itself without extra 10%
+                val treeSpanWidthDp = (2f * maxAbsX) + 180f
+                val treeSpanHeightDp = (2f * maxAbsY) + 210f
+
+                val finalWidthDp = treeSpanWidthDp.dp
+                val finalHeightDp = treeSpanHeightDp.dp
+
+                finalWidthDp to finalHeightDp
             }
         }
 
@@ -4038,7 +4045,14 @@ $databaseError
                     bitmap = imageBitmap.asAndroidBitmap()
                 }
 
-                val file = TreePdfExporter.saveBitmapToPdf(context, bitmap, groupName, exportPersons.size)
+                val reportSummary = FamilyReportHelper.calculateSummary(exportPersons, relationships)
+                val file = TreePdfExporter.saveBitmapToPdf(
+                    context = context,
+                    bitmap = bitmap,
+                    groupName = groupName,
+                    personCount = exportPersons.size,
+                    reportSummary = reportSummary
+                )
                 isExportingPdf = false
                 TreePdfExporter.shareTreePdf(context, file)
             } catch (e: Throwable) {
