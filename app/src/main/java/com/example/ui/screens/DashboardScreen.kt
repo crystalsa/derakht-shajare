@@ -3940,9 +3940,9 @@ $databaseError
                 val treeContentHeightDp = (maxY - minY) + 210f
 
                 val maxSpanDp = maxOf(treeContentWidthDp, treeContentHeightDp)
-                val targetMaxPx = 2800f
+                val targetMaxPx = 3400f
                 val calculatedDensity = targetMaxPx / maxSpanDp
-                minOf(density, calculatedDensity).coerceIn(0.6f, 2.0f)
+                minOf(maxOf(density, 2.0f), calculatedDensity).coerceIn(1.0f, 2.8f)
             }
         }
 

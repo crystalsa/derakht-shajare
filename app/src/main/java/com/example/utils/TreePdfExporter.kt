@@ -40,25 +40,37 @@ object TreePdfExporter {
             bitmap
         } ?: throw IllegalStateException("خطا در کپی بیت‌مپ به حالت نرم‌افزاری")
 
+        val trimmedBitmap = trimWhiteBorders(softwareBitmap)
+
         try {
             val maxPageDimension = 14400f // Ceiling for PDF page size in points (200 inches at 72dpi)
-            val headerHeightPt = 54f
-            val footerHeightPt = 22f
-            val sidePaddingPt = 16f
 
-            // Dynamic page size based directly on the tree bitmap (without 10% extra):
-            var treeWidthPt = softwareBitmap.width.toFloat()
-            var treeHeightPt = softwareBitmap.height.toFloat()
+            // Dynamic page size based directly on the trimmed tree bitmap:
+            var treeWidthPt = trimmedBitmap.width.toFloat()
+            var treeHeightPt = trimmedBitmap.height.toFloat()
 
-            val headerAndFooterPt = headerHeightPt + footerHeightPt
+            // Tree scale boost: Ensure tree nodes are large, bold, and easily readable in PDF
+            val minDesiredTreeWidth = if (reportSummary != null && reportSummary.totalCount > 0) 860f else 660f
+            val minDesiredTreeHeight = if (reportSummary != null && reportSummary.totalCount > 0) 660f else 480f
 
-            var requiredWidthPt = treeWidthPt + (sidePaddingPt * 2f)
-            var requiredHeightPt = treeHeightPt + headerAndFooterPt
+            val boostX = if (treeWidthPt < minDesiredTreeWidth) minDesiredTreeWidth / treeWidthPt else 1.0f
+            val boostY = if (treeHeightPt < minDesiredTreeHeight) minDesiredTreeHeight / treeHeightPt else 1.0f
+            val treeScaleBoost = maxOf(boostX, boostY).coerceIn(1.0f, 2.5f)
 
-            // Ensure page is large enough if comprehensive report card is present
+            val scaledTreeWidth = treeWidthPt * treeScaleBoost
+            val scaledTreeHeight = treeHeightPt * treeScaleBoost
+
+            val sidePaddingPt = maxOf(32f, scaledTreeWidth * 0.035f)
+            val headerHeightPt = 60f
+            val footerHeightPt = 26f
+
+            var requiredWidthPt = scaledTreeWidth + (sidePaddingPt * 2f)
+            var requiredHeightPt = scaledTreeHeight + headerHeightPt + footerHeightPt + 24f
+
+            // Ensure page dimensions comfortably accommodate both the tree and the report card
             if (reportSummary != null && reportSummary.totalCount > 0) {
-                requiredWidthPt = maxOf(requiredWidthPt, 480f)
-                requiredHeightPt = maxOf(requiredHeightPt, 420f)
+                requiredWidthPt = maxOf(requiredWidthPt + 70f, 960f)
+                requiredHeightPt = maxOf(requiredHeightPt + 50f, 780f)
             }
 
             if (requiredWidthPt > maxPageDimension || requiredHeightPt > maxPageDimension) {
@@ -67,8 +79,8 @@ object TreePdfExporter {
                 requiredHeightPt *= scaleFactor
             }
 
-            val pageWidth = requiredWidthPt.toInt().coerceAtLeast(250)
-            val pageHeight = requiredHeightPt.toInt().coerceAtLeast(250)
+            val pageWidth = requiredWidthPt.toInt().coerceAtLeast(300)
+            val pageHeight = requiredHeightPt.toInt().coerceAtLeast(300)
 
             val document = PdfDocument()
             val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
@@ -83,9 +95,13 @@ object TreePdfExporter {
             val topBarPaint = Paint().apply { color = greenColor }
             canvas.drawRect(0f, 0f, pageWidth.toFloat(), 8f, topBarPaint)
 
+            val dynamicTitleSize = (pageWidth * 0.016f).coerceIn(15f, 22f)
+            val dynamicSubtitleSize = (pageWidth * 0.010f).coerceIn(9.5f, 14f)
+            val dynamicFooterSize = (pageWidth * 0.009f).coerceIn(8.5f, 12f)
+
             val titlePaint = Paint().apply {
                 isAntiAlias = true
-                textSize = 15f
+                textSize = dynamicTitleSize
                 isFakeBoldText = true
                 color = greenColor
                 textAlign = Paint.Align.RIGHT
@@ -93,24 +109,24 @@ object TreePdfExporter {
 
             val subtitlePaint = Paint().apply {
                 isAntiAlias = true
-                textSize = 9.5f
+                textSize = dynamicSubtitleSize
                 color = grayColor
                 textAlign = Paint.Align.RIGHT
             }
 
             val footerPaint = Paint().apply {
                 isAntiAlias = true
-                textSize = 8.5f
+                textSize = dynamicFooterSize
                 color = grayColor
                 textAlign = Paint.Align.CENTER
             }
 
             val leftMargin = sidePaddingPt
             val rightMargin = pageWidth - leftMargin
-            var topY = 24f
+            var topY = 26f
 
             canvas.drawText("نمودار شجره‌نامه: $groupName", rightMargin, topY, titlePaint)
-            topY += 14f
+            topY += dynamicTitleSize * 1.05f
 
             val currentDateStr = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(Date())
             val metaText = if (personCount > 0) {
@@ -119,25 +135,24 @@ object TreePdfExporter {
                 "تاریخ تنظیم: ${currentDateStr.toFarsiNumbers()}"
             }
             canvas.drawText(metaText, rightMargin, topY, subtitlePaint)
-            topY += 12f
+            topY += dynamicSubtitleSize * 1.15f
 
             val linePaint = Paint().apply {
                 color = android.graphics.Color.rgb(210, 230, 210)
                 strokeWidth = 1f
             }
             canvas.drawLine(leftMargin, topY, rightMargin, topY, linePaint)
-            topY += 10f
+            topY += 12f
 
             val availableWidth = pageWidth - (leftMargin * 2f)
-            val footerHeight = 22f
-            val availableHeight = pageHeight - topY - footerHeight - 8f
+            val availableHeight = pageHeight - topY - footerHeightPt - 16f
 
             val scale = minOf(
-                availableWidth / softwareBitmap.width.toFloat(),
-                availableHeight / softwareBitmap.height.toFloat()
+                availableWidth / trimmedBitmap.width.toFloat(),
+                availableHeight / trimmedBitmap.height.toFloat()
             )
-            val drawWidth = softwareBitmap.width * scale
-            val drawHeight = softwareBitmap.height * scale
+            val drawWidth = trimmedBitmap.width * scale
+            val drawHeight = trimmedBitmap.height * scale
 
             val drawX = leftMargin + (availableWidth - drawWidth) / 2f
             val drawY = topY + (availableHeight - drawHeight) / 2f
@@ -150,7 +165,7 @@ object TreePdfExporter {
                 isDither = true
             }
 
-            canvas.drawBitmap(softwareBitmap, null, destRect, bitmapPaint)
+            canvas.drawBitmap(trimmedBitmap, null, destRect, bitmapPaint)
 
             if (reportSummary != null && reportSummary.totalCount > 0) {
                 drawComprehensiveReportCard(
@@ -159,8 +174,11 @@ object TreePdfExporter {
                     groupName = groupName,
                     pageWidth = pageWidth.toFloat(),
                     pageHeight = pageHeight.toFloat(),
+                    headerBottomY = topY,
                     footerHeight = footerHeightPt,
-                    leftMargin = leftMargin
+                    leftMargin = leftMargin,
+                    treeBitmap = trimmedBitmap,
+                    treeDestRect = destRect
                 )
             }
 
@@ -186,6 +204,9 @@ object TreePdfExporter {
             AppLogger.i("PDF_EXPORT", "فایل PDF تک صفحه درخت ایجاد شد: ${file.name}")
             file
         } finally {
+            if (trimmedBitmap != softwareBitmap && trimmedBitmap != bitmap) {
+                trimmedBitmap.recycle()
+            }
             if (softwareBitmap != bitmap) {
                 softwareBitmap.recycle()
             }
@@ -211,14 +232,139 @@ object TreePdfExporter {
         }
     }
 
+    private fun isContentPixel(pixel: Int): Boolean {
+        val alpha = (pixel ushr 24) and 0xFF
+        if (alpha < 30) return false
+        val r = (pixel ushr 16) and 0xFF
+        val g = (pixel ushr 8) and 0xFF
+        val b = pixel and 0xFF
+        return r < 246 || g < 246 || b < 246
+    }
+
+    private fun trimWhiteBorders(bitmap: Bitmap): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width <= 20 || height <= 20) return bitmap
+
+        var top = 0
+        var bottom = height - 1
+        var left = 0
+        var right = width - 1
+
+        val rowBuffer = IntArray(width)
+
+        // Find top bound
+        topLoop@ while (top < height) {
+            bitmap.getPixels(rowBuffer, 0, width, 0, top, width, 1)
+            for (x in 0 until width) {
+                if (isContentPixel(rowBuffer[x])) break@topLoop
+            }
+            top++
+        }
+
+        if (top >= height) return bitmap // Entire bitmap is blank
+
+        // Find bottom bound
+        bottomLoop@ while (bottom > top) {
+            bitmap.getPixels(rowBuffer, 0, width, 0, bottom, width, 1)
+            for (x in 0 until width) {
+                if (isContentPixel(rowBuffer[x])) break@bottomLoop
+            }
+            bottom--
+        }
+
+        // Find left & right bounds
+        val colHeight = bottom - top + 1
+        val colBuffer = IntArray(colHeight)
+
+        leftLoop@ while (left < width) {
+            bitmap.getPixels(colBuffer, 0, 1, left, top, 1, colHeight)
+            for (y in 0 until colHeight) {
+                if (isContentPixel(colBuffer[y])) break@leftLoop
+            }
+            left++
+        }
+
+        rightLoop@ while (right > left) {
+            bitmap.getPixels(colBuffer, 0, 1, right, top, 1, colHeight)
+            for (y in 0 until colHeight) {
+                if (isContentPixel(colBuffer[y])) break@rightLoop
+            }
+            right--
+        }
+
+        // Add 24px safety padding around content
+        val pad = 24
+        val safeLeft = (left - pad).coerceAtLeast(0)
+        val safeTop = (top - pad).coerceAtLeast(0)
+        val safeRight = (right + pad).coerceAtMost(width - 1)
+        val safeBottom = (bottom + pad).coerceAtMost(height - 1)
+
+        val cropWidth = safeRight - safeLeft + 1
+        val cropHeight = safeBottom - safeTop + 1
+
+        if (cropWidth <= 0 || cropHeight <= 0 || (cropWidth == width && cropHeight == height)) {
+            return bitmap
+        }
+
+        return try {
+            Bitmap.createBitmap(bitmap, safeLeft, safeTop, cropWidth, cropHeight)
+        } catch (e: Throwable) {
+            AppLogger.e("PDF_EXPORT", "خطا در برش حاشیه سفید تصویر: ${e.message}")
+            bitmap
+        }
+    }
+
+    private fun calculateOverlapScore(
+        cardRect: RectF,
+        treeBitmap: Bitmap,
+        treeDestRect: RectF
+    ): Int {
+        val intersectRect = RectF()
+        if (!intersectRect.setIntersect(cardRect, treeDestRect)) {
+            return 0 // Completely outside the tree bounding box
+        }
+
+        val drawWidth = treeDestRect.width()
+        val drawHeight = treeDestRect.height()
+        if (drawWidth <= 0f || drawHeight <= 0f) return 0
+
+        val scaleX = treeBitmap.width.toFloat() / drawWidth
+        val scaleY = treeBitmap.height.toFloat() / drawHeight
+
+        val bmLeft = ((intersectRect.left - treeDestRect.left) * scaleX).toInt().coerceIn(0, treeBitmap.width - 1)
+        val bmRight = ((intersectRect.right - treeDestRect.left) * scaleX).toInt().coerceIn(0, treeBitmap.width - 1)
+        val bmTop = ((intersectRect.top - treeDestRect.top) * scaleY).toInt().coerceIn(0, treeBitmap.height - 1)
+        val bmBottom = ((intersectRect.bottom - treeDestRect.top) * scaleY).toInt().coerceIn(0, treeBitmap.height - 1)
+
+        if (bmRight <= bmLeft || bmBottom <= bmTop) return 0
+
+        val stepX = maxOf(1, (bmRight - bmLeft) / 36)
+        val stepY = maxOf(1, (bmBottom - bmTop) / 36)
+        var overlapCount = 0
+
+        for (y in bmTop..bmBottom step stepY) {
+            for (x in bmLeft..bmRight step stepX) {
+                if (isContentPixel(treeBitmap.getPixel(x, y))) {
+                    overlapCount++
+                }
+            }
+        }
+
+        return overlapCount
+    }
+
     private fun drawComprehensiveReportCard(
         canvas: android.graphics.Canvas,
         stats: FamilyReportSummary,
         groupName: String,
         pageWidth: Float,
         pageHeight: Float,
+        headerBottomY: Float,
         footerHeight: Float,
-        leftMargin: Float = 28f
+        leftMargin: Float = 28f,
+        treeBitmap: Bitmap? = null,
+        treeDestRect: RectF? = null
     ) {
         data class ReportItem(
             val title: String,
@@ -336,30 +482,88 @@ object TreePdfExporter {
 
         if (items.isEmpty()) return
 
-        // 2x Dimensions (approx 450pt width, double the previous 220pt)
-        val maxAvailableCardWidth = pageWidth - (leftMargin * 2f)
-        val cardWidth = minOf(450f, maxAvailableCardWidth * 0.50f).coerceAtLeast(minOf(360f, maxAvailableCardWidth))
-        val headerHeight = 44f
-        val itemHeight = 31f
-        val itemGap = 7f
-        val outerPadding = 16f
-        val dividerHeight = 12f
+        // Generous, beautiful margins from page edges so it never touches or hugs the boundaries
+        val cardMarginLeft = maxOf(40f, pageWidth * 0.04f)
+        val cardMarginRight = cardMarginLeft
+        val cardMarginBottom = footerHeight + maxOf(28f, pageHeight * 0.035f)
+        val cardMarginTop = headerBottomY + 14f
+
+        // Well-proportioned, elegant dimensions
+        val maxAvailableCardWidth = (pageWidth - cardMarginLeft - cardMarginRight) * 0.44f
+        val cardWidth = minOf(360f, maxAvailableCardWidth).coerceAtLeast(minOf(280f, pageWidth - (cardMarginLeft * 2f)))
+
+        val headerHeight = 38f
+        val itemHeight = 25f
+        val itemGap = 5f
+        val outerPadding = 14f
+        val dividerHeight = 8f
 
         val totalContentHeight = headerHeight + dividerHeight + (items.size * (itemHeight + itemGap)) + outerPadding
         val cardHeight = totalContentHeight
 
-        // Bottom-left corner placement
-        val cardLeft = leftMargin
-        val cardRight = cardLeft + cardWidth
-        val cardBottom = pageHeight - footerHeight - 12f
-        val cardTop = cardBottom - cardHeight
+        // Candidate positions across the corners and sides of the page
+        data class CornerCandidate(val name: String, val rect: RectF)
 
-        val cardRect = RectF(cardLeft, cardTop, cardRight, cardBottom)
+        val candidates = mutableListOf(
+            CornerCandidate(
+                "پایین-چپ",
+                RectF(cardMarginLeft, pageHeight - cardMarginBottom - cardHeight, cardMarginLeft + cardWidth, pageHeight - cardMarginBottom)
+            ),
+            CornerCandidate(
+                "بالا-چپ",
+                RectF(cardMarginLeft, cardMarginTop, cardMarginLeft + cardWidth, cardMarginTop + cardHeight)
+            ),
+            CornerCandidate(
+                "پایین-راست",
+                RectF(pageWidth - cardMarginRight - cardWidth, pageHeight - cardMarginBottom - cardHeight, pageWidth - cardMarginRight, pageHeight - cardMarginBottom)
+            ),
+            CornerCandidate(
+                "بالا-راست",
+                RectF(pageWidth - cardMarginRight - cardWidth, cardMarginTop, pageWidth - cardMarginRight, cardMarginTop + cardHeight)
+            )
+        )
+
+        // Add middle candidates if the page has sufficient vertical height
+        val midTop = cardMarginTop + (pageHeight - cardMarginTop - cardMarginBottom - cardHeight) / 2f
+        if (midTop > cardMarginTop + 30f && (midTop + cardHeight) < (pageHeight - cardMarginBottom - 30f)) {
+            candidates.add(
+                CornerCandidate("وسط-چپ", RectF(cardMarginLeft, midTop, cardMarginLeft + cardWidth, midTop + cardHeight))
+            )
+            candidates.add(
+                CornerCandidate("وسط-راست", RectF(pageWidth - cardMarginRight - cardWidth, midTop, pageWidth - cardMarginRight, midTop + cardHeight))
+            )
+        }
+
+        // Intelligently select the corner that has ZERO (or minimal) overlap with the tree content
+        var selectedCandidate = candidates[0]
+        if (treeBitmap != null && treeDestRect != null) {
+            var minOverlap = Int.MAX_VALUE
+            for (candidate in candidates) {
+                val overlap = calculateOverlapScore(candidate.rect, treeBitmap, treeDestRect)
+                AppLogger.d("PDF_EXPORT", "بررسی موقعیت ${candidate.name}: هم‌پوشانی = $overlap")
+                if (overlap == 0) {
+                    selectedCandidate = candidate
+                    minOverlap = 0
+                    break
+                }
+                if (overlap < minOverlap) {
+                    minOverlap = overlap
+                    selectedCandidate = candidate
+                }
+            }
+            AppLogger.i("PDF_EXPORT", "موقعیت کادر گزارش انتخاب شد: ${selectedCandidate.name} (هم‌پوشانی: $minOverlap)")
+        }
+
+        val cardRect = selectedCandidate.rect
+        val cardLeft = cardRect.left
+        val cardTop = cardRect.top
+        val cardRight = cardRect.right
+        val cardBottom = cardRect.bottom
         val cornerRadius = 18f
 
         // 1. Soft Drop Shadows (Multi-layered for realism)
         val shadowPaintLarge = Paint().apply {
-            color = android.graphics.Color.argb(24, 0, 0, 0)
+            color = android.graphics.Color.argb(22, 0, 0, 0)
             isAntiAlias = true
         }
         canvas.drawRoundRect(
@@ -369,7 +573,7 @@ object TreePdfExporter {
             shadowPaintLarge
         )
         val shadowPaintSmall = Paint().apply {
-            color = android.graphics.Color.argb(16, 0, 0, 0)
+            color = android.graphics.Color.argb(14, 0, 0, 0)
             isAntiAlias = true
         }
         canvas.drawRoundRect(
@@ -387,10 +591,10 @@ object TreePdfExporter {
         }
         canvas.drawRoundRect(cardRect, cornerRadius, cornerRadius, cardBgPaint)
 
-        // 3. Card Border (2dp matching app: .border(2.dp, accentColor, RoundedCornerShape(24.dp)))
+        // 3. Card Border (matching app theme)
         val borderPaint = Paint().apply {
             color = android.graphics.Color.rgb(46, 125, 50) // Emerald green accent
-            strokeWidth = 2.4f
+            strokeWidth = 2f
             style = Paint.Style.STROKE
             isAntiAlias = true
         }
@@ -399,14 +603,14 @@ object TreePdfExporter {
         // 4. Header Section: Title & Bar Chart Icon
         val titleTextPaint = Paint().apply {
             isAntiAlias = true
-            textSize = 15.5f
+            textSize = 13.5f
             isFakeBoldText = true
             color = android.graphics.Color.rgb(30, 41, 59) // App textColor slate-900
             textAlign = Paint.Align.RIGHT
         }
         val headerTitle = "گزارش جامع $groupName"
-        val headerY = cardTop + 28f
-        val headerTextRight = cardRight - outerPadding - 24f
+        val headerY = cardTop + 25f
+        val headerTextRight = cardRight - outerPadding - 22f
         canvas.drawText(headerTitle, headerTextRight, headerY, titleTextPaint)
 
         // Draw Chart Icon representation (3 ascending bars) next to title
@@ -417,33 +621,33 @@ object TreePdfExporter {
         }
         val iconRight = cardRight - outerPadding
         val iconBottom = headerY
-        canvas.drawRoundRect(RectF(iconRight - 4f, iconBottom - 16f, iconRight, iconBottom), 1.5f, 1.5f, chartPaint)
-        canvas.drawRoundRect(RectF(iconRight - 10f, iconBottom - 11f, iconRight - 6f, iconBottom), 1.5f, 1.5f, chartPaint)
-        canvas.drawRoundRect(RectF(iconRight - 16f, iconBottom - 7f, iconRight - 12f, iconBottom), 1.5f, 1.5f, chartPaint)
+        canvas.drawRoundRect(RectF(iconRight - 4f, iconBottom - 14f, iconRight, iconBottom), 1.5f, 1.5f, chartPaint)
+        canvas.drawRoundRect(RectF(iconRight - 9f, iconBottom - 10f, iconRight - 5f, iconBottom), 1.5f, 1.5f, chartPaint)
+        canvas.drawRoundRect(RectF(iconRight - 14f, iconBottom - 6f, iconRight - 10f, iconBottom), 1.5f, 1.5f, chartPaint)
 
-        // Subtle close indicator dot or accent pill on top left of header
+        // Accent pill on top left of header
         val headerPillPaint = Paint().apply {
             color = android.graphics.Color.rgb(235, 245, 235)
             style = Paint.Style.FILL
             isAntiAlias = true
         }
-        canvas.drawCircle(cardLeft + outerPadding + 6f, cardTop + 23f, 7f, headerPillPaint)
+        canvas.drawCircle(cardLeft + outerPadding + 6f, cardTop + 20f, 6.5f, headerPillPaint)
         val headerPillDotPaint = Paint().apply {
             color = android.graphics.Color.rgb(46, 125, 50)
             style = Paint.Style.FILL
             isAntiAlias = true
         }
-        canvas.drawCircle(cardLeft + outerPadding + 6f, cardTop + 23f, 3.5f, headerPillDotPaint)
+        canvas.drawCircle(cardLeft + outerPadding + 6f, cardTop + 20f, 3f, headerPillDotPaint)
 
-        // 5. Horizontal Divider matching app dialog: HorizontalDivider(color = textColor.copy(alpha = 0.1f))
+        // 5. Horizontal Divider matching app dialog
         val dividerPaint = Paint().apply {
             color = android.graphics.Color.argb(35, 100, 116, 139)
-            strokeWidth = 1f
+            strokeWidth = 0.8f
         }
-        val dividerY = cardTop + headerHeight + 2f
+        val dividerY = cardTop + headerHeight
         canvas.drawLine(cardLeft + outerPadding, dividerY, cardRight - outerPadding, dividerY, dividerPaint)
 
-        // 6. StatRowItems (Each in a rounded card with containerColor = Color(0xFFF8FAF8))
+        // 6. StatRowItems (Each in a rounded card)
         val rowBgPaint = Paint().apply {
             color = android.graphics.Color.rgb(248, 250, 248) // 0xFFF8FAF8
             style = Paint.Style.FILL
@@ -457,18 +661,18 @@ object TreePdfExporter {
         }
         val emojiPaint = Paint().apply {
             isAntiAlias = true
-            textSize = 14f
+            textSize = 12.5f
             textAlign = Paint.Align.RIGHT
         }
         val itemTitlePaint = Paint().apply {
             isAntiAlias = true
-            textSize = 11f
-            color = android.graphics.Color.rgb(71, 85, 105) // Slate-600 (textColor.copy(alpha = 0.8f))
+            textSize = 9.5f
+            color = android.graphics.Color.rgb(71, 85, 105) // Slate-600
             textAlign = Paint.Align.RIGHT
         }
         val itemValuePaint = Paint().apply {
             isAntiAlias = true
-            textSize = 12f
+            textSize = 10.5f
             isFakeBoldText = true
             color = android.graphics.Color.rgb(46, 125, 50) // accentColor
             textAlign = Paint.Align.LEFT
@@ -476,8 +680,8 @@ object TreePdfExporter {
 
         val rowLeft = cardLeft + outerPadding
         val rowRight = cardRight - outerPadding
-        val rowRadius = 8f
-        var currentY = dividerY + 8f
+        val rowRadius = 7f
+        var currentY = dividerY + 6f
 
         for (item in items) {
             val itemRect = RectF(rowLeft, currentY, rowRight, currentY + itemHeight)
@@ -486,19 +690,19 @@ object TreePdfExporter {
             canvas.drawRoundRect(itemRect, rowRadius, rowRadius, rowBgPaint)
             canvas.drawRoundRect(itemRect, rowRadius, rowRadius, rowBorderPaint)
 
-            val textBaseline = currentY + (itemHeight / 2f) + 4.2f
+            val textBaseline = currentY + (itemHeight / 2f) + 3.6f
 
             // Right side: Emoji + Title
-            val emojiX = rowRight - 10f
+            val emojiX = rowRight - 8f
             canvas.drawText(item.icon, emojiX, textBaseline, emojiPaint)
 
-            val titleX = emojiX - 22f
-            val valueX = rowLeft + 10f
+            val titleX = emojiX - 18f
+            val valueX = rowLeft + 8f
             
             // Measure value width so title does not collide
             val valueStr = item.value
             val valueWidth = itemValuePaint.measureText(valueStr)
-            val maxTitleWidth = (titleX - (valueX + valueWidth + 12f)).coerceAtLeast(50f)
+            val maxTitleWidth = (titleX - (valueX + valueWidth + 10f)).coerceAtLeast(40f)
 
             var displayTitle = item.title
             if (itemTitlePaint.measureText(displayTitle) > maxTitleWidth) {
