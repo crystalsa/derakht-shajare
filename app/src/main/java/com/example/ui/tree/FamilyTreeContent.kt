@@ -48,7 +48,7 @@ fun FamilyTreeContent(
     val childParentsMap = remember(relationships) {
         val map = mutableMapOf<Long, MutableList<Long>>()
         for (rel in relationships) {
-            if (rel.type == "Parent-Child") {
+            if (rel.type == "Parent-Child" || rel.type == "Adoptive-Parent-Child") {
                 map.getOrPut(rel.personId2) { mutableListOf() }.add(rel.personId1)
             }
         }
@@ -222,7 +222,7 @@ fun FamilyTreeContent(
                                     cap = StrokeCap.Round
                                 )
                             }
-                            "Parent-Child" -> {
+                            "Parent-Child", "Adoptive-Parent-Child" -> {
                                 val childId = rel.personId2
                                 val parentId = rel.personId1
                                 

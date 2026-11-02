@@ -28,6 +28,7 @@ import com.example.data.Person
 import com.example.data.Relationship
 import compose.icons.TablerIcons
 import compose.icons.tablericons.*
+import com.example.ui.common.photoUris
 import com.example.ui.common.toFarsiNumbers
 import com.example.utils.RelationshipCalculator
 import java.io.File
@@ -435,7 +436,7 @@ private fun PersonMiniAvatar(person: Person?, accentColor: Color) {
             .background(accentColor.copy(alpha = 0.15f)),
         contentAlignment = Alignment.Center
     ) {
-        val photo = person?.photoUri
+        val photo = person?.photoUris?.firstOrNull()
         if (!photo.isNullOrBlank() && File(photo).exists()) {
             Image(
                 painter = rememberAsyncImagePainter(model = File(photo)),

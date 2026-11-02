@@ -93,16 +93,19 @@ fun FamilyOverviewStatsDialog(
         parentChildRels.map { it.personId2 }.toSet()
     }
     val spouseRels = remember(relationships) {
-        relationships.filter { it.type == "Spouse" }
+        relationships.filter { isSpouseRelation(it.type) }
     }
     
+    val minGen = remember(persons) {
+        persons.minOfOrNull { it.generation } ?: 0
+    }
     val maxGen = remember(persons) {
         persons.maxOfOrNull { it.generation } ?: 0
     }
-    val totalGenerations = if (totalCount > 0) maxGen + 1 else 0
+    val totalGenerations = if (totalCount > 0) (maxGen - minGen + 1).coerceAtLeast(1) else 0
     
-    val mainRoot = remember(persons) {
-        persons.filter { it.generation == 0 }.find { it.gender == "Male" }
+    val mainRoot = remember(persons, minGen) {
+        persons.filter { it.generation == minGen }.find { it.gender == "Male" }
             ?: persons.minByOrNull { it.generation }
     }
     
@@ -124,20 +127,20 @@ fun FamilyOverviewStatsDialog(
         }
     }
     
-    val children = remember(persons, childrenIds) {
-        persons.filter { childrenIds.contains(it.id) && it.generation == 1 }
+    val children = remember(persons, childrenIds, minGen) {
+        persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 1 }
     }
     
-    val grandchildren = remember(persons, childrenIds) {
-        persons.filter { childrenIds.contains(it.id) && it.generation == 2 }
+    val grandchildren = remember(persons, childrenIds, minGen) {
+        persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 2 }
     }
     
-    val greatGrandchildren = remember(persons, childrenIds) {
-        persons.filter { childrenIds.contains(it.id) && it.generation == 3 }
+    val greatGrandchildren = remember(persons, childrenIds, minGen) {
+        persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 3 }
     }
     
-    val greatGreatGrandchildren = remember(persons, childrenIds) {
-        persons.filter { childrenIds.contains(it.id) && it.generation == 4 }
+    val greatGreatGrandchildren = remember(persons, childrenIds, minGen) {
+        persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 4 }
     }
     
     val livingCount = remember(persons) {

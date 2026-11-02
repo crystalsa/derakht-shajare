@@ -156,9 +156,15 @@ fun InlineFarsiDatePicker(
         else -> 31
     }
 
-    var selectedDayIndex by remember(selectedMonthIndex) {
+    var selectedDayIndex by remember {
         val coercedDay = if (initialDay in 0..maxDays) initialDay else 0
         mutableStateOf(coercedDay)
+    }
+
+    LaunchedEffect(maxDays) {
+        if (selectedDayIndex > maxDays) {
+            selectedDayIndex = maxDays
+        }
     }
 
     var yearMenuExpanded by remember { mutableStateOf(false) }
@@ -397,9 +403,15 @@ fun FarsiWheelDatePickerDialog(
         else -> 31
     }
     
-    var selectedDayIndex by remember(selectedMonthIndex) { 
+    var selectedDayIndex by remember { 
         val coercedDay = if (initialDay in 0..maxDays) initialDay else 0
         mutableStateOf(coercedDay) 
+    }
+
+    LaunchedEffect(maxDays) {
+        if (selectedDayIndex > maxDays) {
+            selectedDayIndex = maxDays
+        }
     }
 
     var yearMenuExpanded by remember { mutableStateOf(false) }
@@ -476,7 +488,7 @@ fun FarsiWheelDatePickerDialog(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(selectedYear.toString(), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21))
+                                    Text(selectedYear.toFarsiNumbers(), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21))
                                     Icon(TablerIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF2E7D32))
                                 }
                             }
@@ -503,7 +515,7 @@ fun FarsiWheelDatePickerDialog(
                                         items(years.size) { index ->
                                             val yr = years[index]
                                             DropdownMenuItem(
-                                                text = { Text(yr.toString(), fontSize = 13.sp, fontWeight = if (yr == selectedYear) FontWeight.Bold else FontWeight.Normal) },
+                                                text = { Text(yr.toFarsiNumbers(), fontSize = 13.sp, fontWeight = if (yr == selectedYear) FontWeight.Bold else FontWeight.Normal) },
                                                 onClick = {
                                                     selectedYear = yr
                                                     yearMenuExpanded = false
@@ -575,7 +587,7 @@ fun FarsiWheelDatePickerDialog(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    val dayDisplay = if (selectedDayIndex == 0) "نامشخص" else selectedDayIndex.toString()
+                                    val dayDisplay = if (selectedDayIndex == 0) "نامشخص" else selectedDayIndex.toFarsiNumbers()
                                     Text(dayDisplay, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF112E21))
                                     Icon(TablerIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF2E7D32))
                                 }
@@ -600,7 +612,7 @@ fun FarsiWheelDatePickerDialog(
                                         modifier = Modifier.fillMaxSize()
                                     ) {
                                         items(maxDays + 1) { index ->
-                                            val dayVal = if (index == 0) "نامشخص" else index.toString()
+                                            val dayVal = if (index == 0) "نامشخص" else index.toFarsiNumbers()
                                             DropdownMenuItem(
                                                 text = { Text(dayVal, fontSize = 13.sp, fontWeight = if (index == selectedDayIndex) FontWeight.Bold else FontWeight.Normal) },
                                                 onClick = {

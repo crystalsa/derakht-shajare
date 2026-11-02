@@ -627,7 +627,7 @@ class FamilyViewModel @JvmOverloads constructor(
             )
         )
 
-        val personsInGroup = allPersons.value.filter { it.groupId == group.id }
+        val personsInGroup = getPersonsInGroup(group.id)
         val oldToNewPersonIdMap = mutableMapOf<Long, Long>()
 
         for (p in personsInGroup) {
@@ -1284,7 +1284,7 @@ class FamilyViewModel @JvmOverloads constructor(
             // Persons
             val personsArr = org.json.JSONArray()
             val personsToBackup = if (groupId != null) {
-                allPersons.value.filter { it.groupId == groupId }
+                getPersonsInGroup(groupId)
             } else {
                 allPersons.value.toList()
             }

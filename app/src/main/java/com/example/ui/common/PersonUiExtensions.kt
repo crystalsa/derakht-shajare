@@ -333,7 +333,7 @@ fun StatRowItem(
                                 val firstPhoto = person.photoUris.firstOrNull()
                                 if (firstPhoto != null) {
                                     SubcomposeAsyncImage(
-                                        model = firstPhoto,
+                                        model = File(firstPhoto),
                                         contentDescription = person.fullName,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier
@@ -345,11 +345,11 @@ fun StatRowItem(
                                             Box(
                                                 modifier = Modifier
                                                     .size(28.dp)
-                                                    .background(if (person.gender == "مرد") Color(0xFFE3F2FD) else Color(0xFFFCE4EC), CircleShape),
+                                                    .background(if (person.gender == "Male") Color(0xFFE3F2FD) else Color(0xFFFCE4EC), CircleShape),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(
-                                                    text = if (person.gender == "مرد") "👨" else "👩",
+                                                    text = if (person.gender == "Male") "👨" else "👩",
                                                     fontSize = 12.sp
                                                 )
                                             }
@@ -361,11 +361,11 @@ fun StatRowItem(
                                     Box(
                                         modifier = Modifier
                                             .size(28.dp)
-                                            .background(if (person.gender == "مرد") Color(0xFFE3F2FD) else Color(0xFFFCE4EC), CircleShape),
+                                            .background(if (person.gender == "Male") Color(0xFFE3F2FD) else Color(0xFFFCE4EC), CircleShape),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = if (person.gender == "مرد") "👨" else "👩",
+                                            text = if (person.gender == "Male") "👨" else "👩",
                                             fontSize = 12.sp
                                         )
                                     }

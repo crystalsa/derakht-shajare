@@ -266,42 +266,56 @@ fun AddParentsDialog(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (fIsDeceased && fHasDeathDate && fHasBirthDate && !validateBirthAndDeathDates(fBirthDateInput, fDeathDateInput)) {
+                        val willAddFather = existingFather == null && addFather
+                        val willAddMother = existingMother == null && addMother
+                        if (!willAddFather && !willAddMother) {
+                            Toast.makeText(context, "لطفاً حداقل یکی از والدین را جهت ثبت انتخاب کنید", Toast.LENGTH_LONG).show()
+                            return@Button
+                        }
+                        if (willAddFather && (fFirstName.trim().isBlank() || fLastName.trim().isBlank())) {
+                            Toast.makeText(context, "تکمیل نام و نام خانوادگی پدر الزامی است", Toast.LENGTH_LONG).show()
+                            return@Button
+                        }
+                        if (willAddMother && (mFirstName.trim().isBlank() || mLastName.trim().isBlank())) {
+                            Toast.makeText(context, "تکمیل نام و نام خانوادگی مادر الزامی است", Toast.LENGTH_LONG).show()
+                            return@Button
+                        }
+                        if (willAddFather && fIsDeceased && fHasDeathDate && fHasBirthDate && !validateBirthAndDeathDates(fBirthDateInput, fDeathDateInput)) {
                             Toast.makeText(context, "تاریخ فوت پدر نمی‌تواند کوچکتر از تاریخ تولد او باشد", Toast.LENGTH_LONG).show()
                             return@Button
                         }
-                        if (mIsDeceased && mHasDeathDate && mHasBirthDate && !validateBirthAndDeathDates(mBirthDateInput, mDeathDateInput)) {
+                        if (willAddMother && mIsDeceased && mHasDeathDate && mHasBirthDate && !validateBirthAndDeathDates(mBirthDateInput, mDeathDateInput)) {
                             Toast.makeText(context, "تاریخ فوت مادر نمی‌تواند کوچکتر از تاریخ تولد او باشد", Toast.LENGTH_LONG).show()
                             return@Button
                         }
-                        val father = if (existingFather == null && addFather && fFirstName.isNotBlank()) {
+                        val father = if (willAddFather) {
                             Person(
-                                firstName = fFirstName,
-                                lastName = fLastName,
+                                firstName = fFirstName.trim(),
+                                lastName = fLastName.trim(),
                                 gender = "Male",
                                 birthDate = if (fHasBirthDate) fBirthDateInput.ifBlank { null } else null,
-                                birthPlace = fBirthPlace.ifBlank { null },
+                                birthPlace = fBirthPlace.trim().ifBlank { null },
                                 deathDate = if (fIsDeceased && fHasDeathDate) fDeathDateInput.ifBlank { null } else null,
-                                deathPlace = if (fIsDeceased) fDeathPlace.ifBlank { null } else null,
+                                deathPlace = if (fIsDeceased) fDeathPlace.trim().ifBlank { null } else null,
                                 isDeceased = fIsDeceased,
-                                occupation = fOccupation.ifBlank { null },
-                                biography = fBiography.ifBlank { null },
+                                occupation = fOccupation.trim().ifBlank { null },
+                                biography = fBiography.trim().ifBlank { null },
                                 groupId = groupId
                             )
                         } else null
 
-                        val mother = if (existingMother == null && addMother && mFirstName.isNotBlank()) {
+                        val mother = if (willAddMother) {
                             Person(
-                                firstName = mFirstName,
-                                lastName = mLastName,
+                                firstName = mFirstName.trim(),
+                                lastName = mLastName.trim(),
                                 gender = "Female",
                                 birthDate = if (mHasBirthDate) mBirthDateInput.ifBlank { null } else null,
-                                birthPlace = mBirthPlace.ifBlank { null },
+                                birthPlace = mBirthPlace.trim().ifBlank { null },
                                 deathDate = if (mIsDeceased && mHasDeathDate) mDeathDateInput.ifBlank { null } else null,
-                                deathPlace = if (mIsDeceased) mDeathPlace.ifBlank { null } else null,
+                                deathPlace = if (mIsDeceased) mDeathPlace.trim().ifBlank { null } else null,
                                 isDeceased = mIsDeceased,
-                                occupation = mOccupation.ifBlank { null },
-                                biography = mBiography.ifBlank { null },
+                                occupation = mOccupation.trim().ifBlank { null },
+                                biography = mBiography.trim().ifBlank { null },
                                 groupId = groupId
                             )
                         } else null

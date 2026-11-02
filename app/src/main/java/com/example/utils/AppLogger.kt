@@ -13,22 +13,26 @@ object AppLogger {
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs: StateFlow<List<String>> = _logs.asStateFlow()
 
+    private fun currentTime(): String = synchronized(dateFormat) {
+        dateFormat.format(Date())
+    }
+
     fun d(tag: String, message: String) {
-        val time = dateFormat.format(Date())
+        val time = currentTime()
         val entry = "[$time] [DEBUG] [$tag] $message"
         Log.d(tag, message)
         appendLog(entry)
     }
 
     fun i(tag: String, message: String) {
-        val time = dateFormat.format(Date())
+        val time = currentTime()
         val entry = "[$time] [INFO] [$tag] $message"
         Log.i(tag, message)
         appendLog(entry)
     }
 
     fun e(tag: String, message: String, throwable: Throwable? = null) {
-        val time = dateFormat.format(Date())
+        val time = currentTime()
         val errDetails = throwable?.let { "\n${it.stackTraceToString()}" } ?: ""
         val entry = "[$time] [ERROR] [$tag] $message$errDetails"
         Log.e(tag, message, throwable)

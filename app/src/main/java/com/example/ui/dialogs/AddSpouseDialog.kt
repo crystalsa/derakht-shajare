@@ -184,6 +184,12 @@ fun AddSpouseDialog(
                             } else {
                                 item {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Checkbox(checked = isDivorced, onCheckedChange = { isDivorced = it })
+                                        Text("مطلقه (جدا شده)", modifier = Modifier.clickable { isDivorced = !isDivorced }, color = textColor)
+                                    }
+                                }
+                                item {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         Checkbox(checked = isDeceased, onCheckedChange = { isDeceased = it })
                                         Text("عضو فوت شده است", modifier = Modifier.clickable { isDeceased = !isDeceased }, color = textColor)
                                     }

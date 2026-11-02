@@ -31,6 +31,7 @@ import com.example.utils.AppLogger
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -283,12 +284,7 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
                     } ?: ""
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                         if (isRestoringSubtree) {
-                            if (selectedGroupId == null) {
-                                Toast.makeText(context, "جهت بازیابی بکاپ عضو، ابتدا باید یک گروه فامیلی ساخته و انتخاب کرده باشید.", Toast.LENGTH_LONG).show()
-                                isRestoringSubtree = false
-                                return@withContext
-                            }
-                            viewModel.importSubtreeBackupFromJson(jsonText) { success, msg, newGroupId ->
+                            viewModel.importSubtreeBackupFromJson(jsonText, currentFolderId) { success, msg, newGroupId ->
                                 Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                 if (success) {
                                     if (newGroupId != null) {
@@ -314,6 +310,27 @@ fun DashboardScreen(viewModel: FamilyViewModel) {
         }
     }
     var activeRoleFilter by remember { mutableStateOf<String?>(null) }
+
+    val canNavigateBack = immersivePhotoIndex != null ||
+        isTreeExpanded ||
+        focusPersonId != null ||
+        activeTab != "Tree" ||
+        isViewingTree ||
+        currentFolderId != null
+
+    BackHandler(enabled = canNavigateBack) {
+        when {
+            immersivePhotoIndex != null -> immersivePhotoIndex = null
+            isTreeExpanded -> isTreeExpanded = false
+            focusPersonId != null -> viewModel.setFocusPersonId(null)
+            activeTab != "Tree" -> activeTab = "Tree"
+            isViewingTree -> isViewingTree = false
+            currentFolderId != null -> {
+                val currentFolder = allFolders.find { it.id == currentFolderId }
+                viewModel.setCurrentFolderId(currentFolder?.parentId)
+            }
+        }
+    }
 
     LaunchedEffect(allGroups, currentFolderId, selectedGroupId) {
         val groupsInCurrentFolder = allGroups.filter { it.folderId == currentFolderId }
@@ -913,7 +930,9 @@ $databaseError
 
                                 // 2. Render Family Group Cards
                                 items(orderedGroupsList, key = { "group_${it.id}" }) { group ->
-                                    val memberCount = persons.count { it.groupId == group.id }
+                                    val memberCount = remember(allPersonsRaw, relationships, group.id) {
+                                        viewModel.getPersonsInGroup(group.id).size
+                                    }
 
                                     FamilyGroupCard(
                                         group = group,
@@ -1177,9 +1196,14 @@ $databaseError
                                 }
 
                                 // Generations card (Col 2)
-                                val maxGeneration = remember(allPersonsRaw, selectedGroupId) {
-                                    val groupPersons = if (selectedGroupId != null) allPersonsRaw.filter { it.groupId == selectedGroupId } else emptyList()
-                                    if (groupPersons.isEmpty()) 0 else (groupPersons.maxOfOrNull { it.generation }?.let { it + 1 } ?: 0)
+                                val maxGeneration = remember(allPersonsRaw, relationships, selectedGroupId) {
+                                    val gid = selectedGroupId
+                                    val groupPersons = if (gid != null) viewModel.getPersonsInGroup(gid) else emptyList()
+                                    if (groupPersons.isEmpty()) 0 else {
+                                        val minG = groupPersons.minOf { it.generation }
+                                        val maxG = groupPersons.maxOf { it.generation }
+                                        (maxG - minG + 1).coerceAtLeast(1)
+                                    }
                                 }
                                 Card(
                                     modifier = Modifier
@@ -1753,9 +1777,10 @@ $databaseError
                                 } else {
                                     val parentChildRels = relationships.filter { it.type == "Parent-Child" || it.type == "Adoptive-Parent-Child" }
                                     val childrenIds = parentChildRels.map { it.personId2 }.toSet()
-                                    val spouseRels = relationships.filter { it.type == "Spouse" }
+                                    val spouseRels = relationships.filter { isSpouseRelation(it.type) }
+                                    val minGen = persons.minOfOrNull { it.generation } ?: 0
                                     
-                                    val mainRoot = persons.filter { it.generation == 0 }.find { it.gender == "Male" }
+                                    val mainRoot = persons.filter { it.generation == minGen }.find { it.gender == "Male" }
                                         ?: persons.minByOrNull { it.generation }
 
                                     when (activeRoleFilter) {
@@ -1772,10 +1797,10 @@ $databaseError
                                             !childrenIds.contains(p.id) &&
                                             spouseRels.any { it.personId1 == p.id || it.personId2 == p.id }
                                         }
-                                        "Child" -> persons.filter { childrenIds.contains(it.id) && it.generation == 1 }
-                                        "Grandchild" -> persons.filter { childrenIds.contains(it.id) && it.generation == 2 }
-                                        "GreatGrandchild" -> persons.filter { childrenIds.contains(it.id) && it.generation == 3 }
-                                        "GreatGreatGrandchild" -> persons.filter { childrenIds.contains(it.id) && it.generation == 4 }
+                                        "Child" -> persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 1 }
+                                        "Grandchild" -> persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 2 }
+                                        "GreatGrandchild" -> persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 3 }
+                                        "GreatGreatGrandchild" -> persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 4 }
                                         else -> persons
                                     }
                                 }
@@ -1808,6 +1833,7 @@ $databaseError
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 // Avatar
+                                                val firstPhoto = person.photoUris.firstOrNull()
                                                 Box(
                                                     modifier = Modifier
                                                         .size(48.dp)
@@ -1817,16 +1843,25 @@ $databaseError
                                                         ),
                                                     contentAlignment = Alignment.Center
                                                 ) {
-                                                    val (avatarIcon, iconTint) = when {
-                                                        person.gender == "Male" -> Pair(Icons.Default.Face, Color(0xFF1E88E5))
-                                                        else -> Pair(Icons.Default.FaceRetouchingNatural, Color(0xFFD81B60))
+                                                    if (!firstPhoto.isNullOrBlank() && java.io.File(firstPhoto).exists()) {
+                                                        Image(
+                                                            painter = coil.compose.rememberAsyncImagePainter(model = java.io.File(firstPhoto)),
+                                                            contentDescription = person.fullName,
+                                                            modifier = Modifier.fillMaxSize(),
+                                                            contentScale = ContentScale.Crop
+                                                        )
+                                                    } else {
+                                                        val (avatarIcon, iconTint) = when {
+                                                            person.gender == "Male" -> Pair(Icons.Default.Face, Color(0xFF1E88E5))
+                                                            else -> Pair(Icons.Default.FaceRetouchingNatural, Color(0xFFD81B60))
+                                                        }
+                                                        Icon(
+                                                            avatarIcon,
+                                                            contentDescription = null,
+                                                            tint = iconTint,
+                                                            modifier = Modifier.size(32.dp)
+                                                        )
                                                     }
-                                                    Icon(
-                                                        avatarIcon,
-                                                        contentDescription = null,
-                                                        tint = iconTint,
-                                                        modifier = Modifier.size(32.dp)
-                                                    )
                                                 }
 
                                                 Spacer(modifier = Modifier.width(12.dp))
@@ -2200,8 +2235,9 @@ $databaseError
     if (showCropDialog && tempPickedUri != null) {
         val originalBitmap = remember(tempPickedUri) {
             try {
-                val inputStream = context.contentResolver.openInputStream(tempPickedUri!!)
-                android.graphics.BitmapFactory.decodeStream(inputStream)
+                context.contentResolver.openInputStream(tempPickedUri!!)?.use { inputStream ->
+                    android.graphics.BitmapFactory.decodeStream(inputStream)
+                }
             } catch (e: Exception) {
                 null
             }
@@ -3135,7 +3171,7 @@ $databaseError
                     Button(
                         onClick = {
                             if (newGroupName.isNotBlank()) {
-                                viewModel.addGroup(com.example.data.FamilyGroup(name = newGroupName)) { newGroupId ->
+                                viewModel.addGroup(com.example.data.FamilyGroup(name = newGroupName.trim(), folderId = currentFolderId)) { newGroupId ->
                                     selectedGroupIdForParents = newGroupId
                                     personToAddParentsFor = child
                                     showGroupPromptForParents = null
@@ -3810,15 +3846,11 @@ $databaseError
                     Button(
                         colors = ButtonDefaults.buttonColors(containerColor = accentColor),
                         onClick = {
-                            if (selectedGroupId == null) {
-                                Toast.makeText(context, "جهت بازیابی بکاپ عضو، ابتدا باید یک گروه فامیلی ساخته و انتخاب کرده باشید.", Toast.LENGTH_LONG).show()
-                            } else {
-                                try {
-                                    isRestoringSubtree = true
-                                    importFileLauncher.launch("*/*")
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "خطا در اجرای انتخاب‌گر فایل: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                                }
+                            try {
+                                isRestoringSubtree = true
+                                importFileLauncher.launch("*/*")
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "خطا در اجرای انتخاب‌گر فایل: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -3867,10 +3899,6 @@ $databaseError
                 Button(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
                     onClick = {
-                        if (selectedGroupId == null) {
-                            Toast.makeText(context, "جهت بازیابی بکاپ عضو، ابتدا باید یک گروه فامیلی ساخته و انتخاب کرده باشید.", Toast.LENGTH_LONG).show()
-                            return@Button
-                        }
                         if (restoreText.trim().isEmpty()) {
                             errorMessage = "لطفا ابتدا کد پشتیبان را وارد کنید یا فایل انتخاب نمایید."
                             return@Button
@@ -3908,9 +3936,9 @@ $databaseError
         }
         val groupName = selectedGroup.name
 
-        val exportPersons = remember(allPersonsRaw, selectedGroup) {
+        val exportPersons = remember(allPersonsRaw, relationships, selectedGroup, selectedGroupId) {
             if (selectedGroupId != null) {
-                allPersonsRaw.filter { it.groupId == selectedGroup.id }
+                viewModel.getPersonsInGroup(selectedGroup.id)
             } else {
                 allPersonsRaw
             }

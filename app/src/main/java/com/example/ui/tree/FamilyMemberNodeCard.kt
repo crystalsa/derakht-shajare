@@ -83,7 +83,7 @@ fun FamilyMemberNodeCard(
                 modifier
             }
         }
-        .pointerInput(Unit) {
+        .pointerInput(person, onClick, onDoubleTap) {
             detectTapGestures(
                 onDoubleTap = { onDoubleTap() },
                 onTap = { onClick() }

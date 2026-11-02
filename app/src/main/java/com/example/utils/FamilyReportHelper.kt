@@ -34,12 +34,13 @@ object FamilyReportHelper {
 
         val parentChildRels = relationships.filter { it.type == "Parent-Child" || it.type == "Adoptive-Parent-Child" }
         val childrenIds = parentChildRels.map { it.personId2 }.toSet()
-        val spouseRels = relationships.filter { it.type == "Spouse" }
+        val spouseRels = relationships.filter { com.example.ui.common.isSpouseRelation(it.type) }
 
+        val minGen = persons.minOfOrNull { it.generation } ?: 0
         val maxGen = persons.maxOfOrNull { it.generation } ?: 0
-        val totalGenerations = if (totalCount > 0) maxGen + 1 else 0
+        val totalGenerations = if (totalCount > 0) (maxGen - minGen + 1).coerceAtLeast(1) else 0
 
-        val mainRoot = persons.filter { it.generation == 0 }.find { it.gender == "Male" }
+        val mainRoot = persons.filter { it.generation == minGen }.find { it.gender == "Male" }
             ?: persons.minByOrNull { it.generation }
 
         val brides = persons.filter { p ->
@@ -56,10 +57,10 @@ object FamilyReportHelper {
             spouseRels.any { it.personId1 == p.id || it.personId2 == p.id }
         }
 
-        val children = persons.filter { childrenIds.contains(it.id) && it.generation == 1 }
-        val grandchildren = persons.filter { childrenIds.contains(it.id) && it.generation == 2 }
-        val greatGrandchildren = persons.filter { childrenIds.contains(it.id) && it.generation == 3 }
-        val greatGreatGrandchildren = persons.filter { childrenIds.contains(it.id) && it.generation == 4 }
+        val children = persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 1 }
+        val grandchildren = persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 2 }
+        val greatGrandchildren = persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 3 }
+        val greatGreatGrandchildren = persons.filter { childrenIds.contains(it.id) && (it.generation - minGen) == 4 }
 
         val livingCount = persons.count { !it.isDeceased }
         val deceasedCount = persons.count { it.isDeceased }
